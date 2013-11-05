@@ -22,18 +22,25 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "CDR.hh"
 #include "CharCell.hh"
 #include "Common.hh"
 #include "FloatCell.hh"
 #include "IntCell.hh"
-#include "main.hh"
+#include "LibPaths.hh"
 #include "ProcessorID.hh"
 #include "Quad_SVx.hh"
 #include "Svar_DB.hh"
 #include "Svar_signals.hh"
 #include "Workspace.hh"
+
+extern char **environ;
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 Quad_SVC Quad_SVC::fun;
 Quad_SVO Quad_SVO::fun;
@@ -45,7 +52,7 @@ APL_time Quad_SVE::timer_end = 0;
 
 //=============================================================================
 /**
-    return true iff \b filename is a regular file with permission 666 or more
+    return true iff \b filename is an executable file
  **/
 bool
 Quad_SVx::is_executable(const char * file_and_args)
@@ -54,15 +61,7 @@ string filename(file_and_args);
 const char * end = strchr(file_and_args, ' ');
    if (end)   filename.resize(end - file_and_args);
 
-/// file mode RX for all, group, and owner
-enum { perm_666 = S_IRUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH };
-
-struct stat st;
-  if (stat(filename.c_str(), &st))    return false;   // stat() failed
-
-  if (!S_ISREG(st.st_mode))   return false;   // not regular file
-
-  return ((st.st_mode & perm_666) == perm_666);
+   return access(filename.c_str(), X_OK) == 0;
 }
 //-----------------------------------------------------------------------------
 void
@@ -85,14 +84,14 @@ const AP_num par_ID = ProcessorID::get_parent_ID();
          Log(LOG_shared_variables)   verbose = " -v";
          if (startup)
             snprintf(filename, PATH_MAX,
-                      "%s%s/APnnn --id %u --par %u%s --ppid %u",
-                     get_APL_bin_path(), dirs[d], own_ID, par_ID, verbose,
-                     getpid());
+                     "%s%s/APnnn --id %u --par %u%s --ppid %u",
+                     LibPaths::get_APL_bin_path(), dirs[d],
+                     own_ID, par_ID, verbose, getpid());
          else
             snprintf(filename, PATH_MAX,
                      "%s%s/AP%u --id %u --par %u --gra %u --auto%s --ppid %u",
-                     get_APL_bin_path(), dirs[d], proc, proc, own_ID, par_ID,
-                     verbose, getpid());
+                     LibPaths::get_APL_bin_path(), dirs[d], proc, proc,
+                     own_ID, par_ID, verbose, getpid());
 
          if (!is_executable(filename))   continue;
 
@@ -115,7 +114,7 @@ const AP_num par_ID = ProcessorID::get_parent_ID();
        }
 
    CERR << "No binary found for AP " << proc << " (interpreter path = "
-        << get_APL_bin_path() << ")" << endl;
+        << LibPaths::get_APL_bin_path() << ")" << endl;
 
    return;
 }
@@ -129,7 +128,7 @@ Quad_SVC::eval_AB(Value_P A, Value_P B)
 const ShapeItem var_count = B->get_rows();
    if (A->get_rows() != var_count)               LENGTH_ERROR;
    if (A->get_rank() > 0 && A->get_cols() != 4)   LENGTH_ERROR;
-UCS_string vars[var_count];
+vector<UCS_string> vars(var_count);
    B->to_varnames(vars, false);
 
 const APL_Float qct = Workspace::get_CT();
@@ -187,7 +186,7 @@ Quad_SVC::eval_B(Value_P B)
    if (B->get_rank() > 2)   RANK_ERROR;
 
 const ShapeItem var_count = B->get_rows();
-UCS_string vars[var_count];
+vector<UCS_string> vars(var_count);
    B->to_varnames(vars, false);
 
 const Shape shZ(var_count, 4);
@@ -261,7 +260,7 @@ const APL_time wait = timer_end - current_time;
    //
 bool got_event = false;
    {
-     UdpClientSocket event_sock(ProcessorID::get_APnnn_port());
+     UdpClientSocket event_sock(LOC, ProcessorID::get_APnnn_port());
      Log(LOG_shared_variables)   event_sock.set_debug(CERR);
 
      {
@@ -320,8 +319,11 @@ Quad_SVO::eval_AB(Value_P A, Value_P B)
    if (B->get_rank() > 2)   RANK_ERROR;
 
 const ShapeItem var_count = B->get_rows();
-UCS_string apl_vars[var_count];      B->to_varnames(apl_vars,   false);
-UCS_string surrogates[var_count];    B->to_varnames(surrogates, true);
+vector<UCS_string> apl_vars(var_count);
+   B->to_varnames(apl_vars,   false);
+
+vector<UCS_string> surrogates(var_count);
+   B->to_varnames(surrogates, true);
 
    if (A->get_rank() == 1 && A->element_count() != var_count)   LENGTH_ERROR;
 
@@ -468,7 +470,7 @@ Quad_SVO::eval_B(Value_P B)
    if (B->get_rank() > 2)   RANK_ERROR;
 
 const ShapeItem var_count = B->get_rows();
-UCS_string vars[var_count];
+vector<UCS_string> vars(var_count);
    B->to_varnames(vars, false);
 
 Value_P Z = var_count > 1 ? new Value(var_count, LOC) : new Value(LOC);
@@ -543,7 +545,8 @@ const char * dirs[] = { "", "/APs" };
    for (int d = 0; d < dircount; ++d)
        {
          char dirname[PATH_MAX + 1];
-         snprintf(dirname, PATH_MAX, "%s%s", get_APL_bin_path(), dirs[d]);
+         snprintf(dirname, PATH_MAX, "%s%s", LibPaths::get_APL_bin_path(),
+                  dirs[d]);
          dirname[PATH_MAX] = 0;
          DIR * dir = opendir(dirname);
          if (dir == 0)
@@ -658,7 +661,7 @@ Quad_SVR::eval_B(Value_P B)
    if (B->get_rank() > 2)   RANK_ERROR;
 
 const ShapeItem var_count = B->get_rows();
-UCS_string vars[var_count];
+vector<UCS_string> vars(var_count);
    B->to_varnames(vars, false);
 
 Value_P Z = var_count > 1 ? new Value(var_count, LOC) : new Value(LOC);
@@ -682,7 +685,7 @@ Quad_SVS::eval_B(Value_P B)
    if (B->get_rank() > 2)   RANK_ERROR;
 
 const ShapeItem var_count = B->get_rows();
-UCS_string vars[var_count];
+vector<UCS_string> vars(var_count);
    B->to_varnames(vars, false);
 
 const Shape shZ(var_count, 4);

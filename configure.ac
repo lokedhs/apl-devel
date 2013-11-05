@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.65])
-AC_INIT([GNU APL], [1.0], [bug-apl@gnu.org])
+AC_INIT([GNU APL], [1.1], [bug-apl@gnu.org])
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([src])
 AC_CONFIG_HEADERS([config.h])
@@ -39,10 +39,41 @@ AC_CHECK_FUNCS([floor memset munmap pow sqrt strchr strerror])
 
 # Checks for libraries.
 AC_CHECK_LIB([lapack], [dgelsy_])
+AC_CHECK_LIB([blas], [dcopy_])
+#AC_CHECK_LIB([gfortran], [_gfortran_transpose])
+AC_CHECK_LIB([execinfo], [backtrace])
 AC_CHECK_LIB([intl], [libintl_gettext])
 AC_CHECK_LIB([m], [acosh])
-AC_CHECK_LIB([readline], [readline])
 AC_CHECK_LIB([rt], [shm_open])
+AC_CHECK_LIB([pthread], [sem_init])
+
+# enable readline support if libreadline is present and the user
+# has not disabled it.
+#
+AC_ARG_WITH( [readline],
+             [AS_HELP_STRING([--with-readline],
+             [support fancy command line editing @<:@default=check@:>@])],
+             [],
+             [with_readline=check])
+
+LIBREADLINE=
+    AS_IF(
+	[test "x$with_readline" != xno],
+	[AC_CHECK_LIB(
+	    [readline],
+	    [readline],
+            [AC_SUBST([LIBREADLINE], ["-lreadline -lncurses"])
+             AC_DEFINE([HAVE_LIBREADLINE],
+                      [1],
+                      [Define if you have libreadline])
+	    ],
+	    [ if test "x$with_readline" != xcheck; then
+		AC_MSG_FAILURE(
+		    [--with-readline was given, but test for readline failed])
+	      fi
+	    ],
+	    -lncurses)
+	])
 
 AC_CONFIG_FILES([Makefile po/Makefile.in po/Makefile
                  debian/Makefile
@@ -134,6 +165,10 @@ AC_ARG_VAR(CIN_COLOR_WANTED,
          [ CIN  color (see README-2-configure) default: CSI 0;30;47m ])
 AC_ARG_VAR(COUT_COLOR_WANTED,
          [ COUT color (see README-2-configure) default: CSI 0;30;48m ])
+AC_ARG_VAR(RESET_COLORS_WANTED,
+         [ reset colors (see README-2-configure) default: CSI 0;38;48m ])
+AC_ARG_VAR(CLEAR_EOL_WANTED,
+         [ clear to end-of-line (see README-2-configure) default: CSI K ])
 
 if test "x$CERR_COLOR_WANTED" = "x";
    then CERR_COLOR_WANTED="27, 91, '0', ';', '3', '5', ';', '4', '8', 'm'" ; fi
@@ -141,9 +176,15 @@ if test "x$CIN_COLOR_WANTED" = "x";
    then  CIN_COLOR_WANTED="27, 91, '0', ';', '3', '0', ';', '4', '7', 'm'" ; fi
 if test "x$COUT_COLOR_WANTED" = "x";
    then COUT_COLOR_WANTED="27, 91, '0', ';', '3', '0', ';', '4', '8', 'm'" ; fi
+if test "x$RESET_COLORS_WANTED" = "x";
+   then RESET_COLORS_WANTED="27, 91, '0', ';', '3', '8', ';', '4', '8', 'm'"; fi
+if test "x$CLEAR_EOL_WANTED" = "x";
+   then CLEAR_EOL_WANTED="27, 91, 'K'" ; fi
 
 AC_DEFINE_UNQUOTED([CERR_COLOR_WANTED], [$CERR_COLOR_WANTED], [CERR color])
 AC_DEFINE_UNQUOTED([CIN_COLOR_WANTED],  [$CIN_COLOR_WANTED],  [CIN color])
 AC_DEFINE_UNQUOTED([COUT_COLOR_WANTED], [$COUT_COLOR_WANTED], [COUT color])
+AC_DEFINE_UNQUOTED([RESET_COLORS_WANTED],[$RESET_COLORS_WANTED],[default color])
+AC_DEFINE_UNQUOTED([CLEAR_EOL_WANTED], [$CLEAR_EOL_WANTED], [clear to EOL])
 
 AC_OUTPUT

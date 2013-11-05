@@ -60,8 +60,9 @@
 using namespace std;
 
 //----------------------------------------------------------------------------
-UdpSocket::UdpSocket(bool _is_server)
-  : local_port(-1),
+UdpSocket::UdpSocket(bool _is_server, const char * _loc)
+  : loc(_loc),
+    local_port(-1),
     remote_port(-1),
     local_ip(-1),
     remote_ip(-1),
@@ -71,9 +72,11 @@ UdpSocket::UdpSocket(bool _is_server)
 {
 }
 //----------------------------------------------------------------------------
-UdpSocket::UdpSocket(uint16_t _local_port, uint16_t _remote_port,
-             uint32_t _local_ip,   uint32_t _remote_ip, bool _is_server)
-  : local_port(_local_port),
+UdpSocket::UdpSocket(uint16_t _local_port, int _remote_port,
+             uint32_t _local_ip,  uint32_t _remote_ip,
+             bool _is_server, const char * _loc)
+  : loc(_loc),
+    local_port(_local_port),
     remote_port(_remote_port),
     local_ip(_local_ip),
     remote_ip(_remote_ip),
@@ -92,7 +95,7 @@ sockaddr_in local;
    local.sin_port = htons(local_port);
    local.sin_addr.s_addr = htonl(local_ip);
 
-   if (bind(udp_socket, (const sockaddr *)&local, sizeof(sockaddr_in)))
+   if (::bind(udp_socket, (const sockaddr *)&local, sizeof(sockaddr_in)))
       {
         cerr << "*** UdpSocket::UdpSocket() : bind("
              << local_port << ") failed:" << strerror(errno) << endl;
@@ -126,7 +129,14 @@ sockaddr_in remote;
             {
               if (errno == EINTR)   continue;   // signal received
 
-              cerr << "UdpSocket::send() failed: " << strerror(errno) << endl;
+              cerr << "UdpSocket::sendto() failed: " << strerror(errno) << endl
+                   << "socket was created at: " << loc << endl
+                   << "local address:  ";
+              print_addr(cerr,  local_ip, local_port);
+              cerr << "remote address: " << endl;
+              print_addr(cerr,  remote_ip, remote_port);
+              cerr << endl;
+
               return -errno;
             }
 
@@ -150,7 +160,9 @@ socklen_t remote_len = sizeof(remote);
               fd_set read_fds;
               FD_ZERO(&read_fds);
               FD_SET(udp_socket, &read_fds);
-              timeval tv = { timeout_ms/1000, 1000*(timeout_ms%1000) };
+              const int tv_sec  = timeout_ms/1000;
+              const int tv_usec = 1000*(timeout_ms%1000);
+              timeval tv = { tv_sec, tv_usec };
 
               errno = 0;
               const int cnt = select(udp_socket + 1, &read_fds, 0, 0, &tv);
@@ -201,6 +213,15 @@ int len = -1;
       }
 
    return len;
+}
+//----------------------------------------------------------------------------
+void
+UdpSocket::print_addr(std::ostream & out, uint32_t ip, int port)
+{
+   out << (ip >> 24 & 0xFF) << "."
+       << (ip >> 16 & 0xFF) << "."
+       << (ip >>  8 & 0xFF) << "."
+       << (ip       & 0xFF) << ":" << port;
 }
 //----------------------------------------------------------------------------
 

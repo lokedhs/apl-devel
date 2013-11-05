@@ -18,6 +18,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <unistd.h>
+
 #include "ArrayIterator.hh"
 #include "Avec.hh"
 #include "CDR.hh"
@@ -35,6 +37,8 @@
 #include "UserFunction.hh"
 #include "Value.hh"
 #include "Workspace.hh"
+
+extern char **environ;
 
 Quad_AF  Quad_AF::fun;
 Quad_AT  Quad_AT::fun;
@@ -298,7 +302,9 @@ const APL_time end = start + 1000000 * B->get_ravel(0).get_real_value();
          const APL_time wait =  end - now();
          if (wait <= 0)   break;
 
-         timeval tv = { long(wait/1000000), long(wait%1000000) };
+         const int wait_sec  = wait/1000000;
+         const int wait_usec = wait%1000000;
+         timeval tv = { wait_sec, wait_usec };
          if (select(0, 0, 0, 0, &tv) == 0)   break;
        }
 
@@ -775,7 +781,7 @@ Quad_EX::eval_B(Value_P B)
    if (B->get_rank() > 2)   RANK_ERROR;
 
 const ShapeItem var_count = B->get_rows();
-UCS_string vars[var_count];
+vector<UCS_string> vars(var_count);
    B->to_varnames(vars, false);
 
 Value_P Z = var_count > 1 ? new Value(var_count, LOC) : new Value(LOC);
@@ -1007,7 +1013,15 @@ Token tok(TOK_FIRST_TIME);
 bool
 Quad_INP::eoc_INP(Token & token, _EOC_arg & _arg)
 {
-   if (token.get_tag() == TOK_ERROR)   return false;   // stop it
+   if (token.get_tag() == TOK_ERROR)
+      {
+         CERR << "Error in ⎕INP" << endl;
+         UCS_string err("*** ");
+         err += Error::error_name((ErrorCode)(token.get_int_val()));
+         err.app(" in ⎕INP ***");
+         Value_P val = new Value(err, LOC);
+         token = Token(TOK_APL_VALUE1, val);
+      }
 
    // _arg may be pop_SI()ed below so we need a copy of it
    //
@@ -1160,7 +1174,7 @@ Quad_NC::eval_B(Value_P B)
    if (B->get_rank() > 2)   RANK_ERROR;
 
 const ShapeItem var_count = B->get_rows();
-UCS_string vars[var_count];
+vector<UCS_string> vars(var_count);
    B->to_varnames(vars, false);
 
 Value_P Z = var_count > 1 ? new Value(var_count, LOC) : new Value(LOC);

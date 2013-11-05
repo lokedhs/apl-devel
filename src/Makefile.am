@@ -7,7 +7,7 @@ localedir = $(datadir)/locale
 DEFS = -DLOCALEDIR=\"$(localedir)\" @DEFS@
 
 apl_SOURCES = \
-		buildtag		buildtag.hh		\
+		    buildtag		buildtag.hh		\
 					../config.h		\
 					APL_types.hh		\
 Archive.cc				Archive.hh		\
@@ -43,6 +43,7 @@ IndexIterator.cc			IndexIterator.hh	\
 Input.cc				Input.hh		\
 IntCell.cc				IntCell.hh		\
 LApack.cc							\
+LibPaths.cc				LibPaths.hh		\
 Logging.cc	    Logging.def		Logging.hh		\
 LvalCell.cc				LvalCell.hh		\
 main.cc					main.hh			\
@@ -77,7 +78,7 @@ SymbolTable.cc				SymbolTable.hh		\
 					SystemLimits.hh		\
 SystemVariable.cc   SystemVariable.def	SystemVariable.hh	\
 TestFiles.cc				TestFiles.hh		\
-Token.cc				Token.hh		\
+Token.cc	    Token.def		Token.hh		\
 					TokenEnums.hh		\
 Tokenizer.cc				Tokenizer.hh		\
 UCS_string.cc				UCS_string.hh		\
@@ -100,9 +101,9 @@ Workspace.cc				Workspace.hh
 update-svar_signals:
 	m4 -D protocol=Svar_signals udp_signal.m4 > Svar_signals.hh
 
-apl_CXXFLAGS = -rdynamic $(GPROF_WANTED)
+apl_CXXFLAGS = -rdynamic $(GPROF_WANTED) -DSYSCONFDIR=\"$(sysconfdir)\"
 
-apl_LDFLAGS  = $(GPROF_WANTED) $(LIBS)
+apl_LDFLAGS  = $(GPROF_WANTED) $(LIBS) $(LIBREADLINE)
 
 apl.lines: apl
 	objdump -j .text -l -d $< > $@

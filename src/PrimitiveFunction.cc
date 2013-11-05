@@ -42,6 +42,7 @@
 #include "Value.hh"
 #include "Workspace.hh"
                                             
+Bif_F0_ZILDE      Bif_F0_ZILDE::fun;         // ⍬
 Bif_F1_EXECUTE    Bif_F1_EXECUTE::fun;       // ⍎
 Bif_F2_INDEX      Bif_F2_INDEX::fun;         // ⌷
 Bif_F12_PARTITION Bif_F12_PARTITION::fun;    // ⊂
@@ -90,6 +91,12 @@ UCS_string ind(indent, UNI_ASCII_SPACE);
    out << ind << "System Function ";
    print(out);
    out << endl;
+}
+//=============================================================================
+Token
+Bif_F0_ZILDE::eval_()
+{
+   return Token(TOK_APL_VALUE1, &Value::Idx0);
 }
 //=============================================================================
 Token
@@ -769,7 +776,13 @@ Value_P Z = divide_matrix(rows_A, cols_A, A, cols_B, B, shape_Z, qct);
    //
    {
      ShapeItem ec_Z = shape_Z.element_count();
-     loop(z, ec_Z)   Z->get_ravel(z).demote(1.0e-15);
+     Cell * cZ = &Z->get_ravel(0);
+     loop(z, ec_Z)
+        {
+          if (cZ->is_complex_cell())   cZ->demote_complex_to_real(1.0e-15);
+          else                         cZ->demote_float_to_int(1.0e-15);
+          ++cZ;
+        }
    }
 
    return CHECK(Z, LOC);
@@ -1172,7 +1185,8 @@ APL_Complex value_C = cB.get_complex_value();   // C[] in the standard
              value_C /= cA->get_complex_value();
            }
 
-         cZ->demote(qct);
+         cZ->demote_complex_to_real(qct);
+         cZ->demote_float_to_int(qct);
        }
 }
 //-----------------------------------------------------------------------------

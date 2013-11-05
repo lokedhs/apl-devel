@@ -28,6 +28,7 @@
 #include "Parser.hh"
 #include "PrintOperator.hh"
 #include "UTF8_string.hh"
+#include "Value.hh"
 
 using namespace std;
 
@@ -40,15 +41,15 @@ struct Character_definition
    Unicode       unicode;     ///< Unicode of the char.
    const char *  char_name;   ///< Name of the char.
    int           def_line;    ///< Line where the char is defined.
-   TokenTag      token;       ///< Token tag for the char.
+   TokenTag      token_tag;   ///< Token tag for the char.
    CharacterFlag flags;       ///< Character class.
    int           av_pos;      ///< position in ⎕AV (== ⎕AF unicode)
 };
 
 //-----------------------------------------------------------------------------
-#define char_def(n, u, t, f, p) \
+#define char_def(n, _u, t, f, p) \
    { AV_ ## n, UNI_ ## n, # n, __LINE__, TOK_ ## t, FLG_ ## f, 0x ## p },
-#define char_df1(n, u, t, f, p)
+#define char_df1(_n, _u, _t, _f, _p)
 const Character_definition character_table[MAX_AV] =
 {
 #include "Avec.def"
@@ -65,6 +66,8 @@ Avec::show_error_pos(int i, int line, bool cond, int def_line)
       }
 }
 //-----------------------------------------------------------------------------
+#if 0
+
 void
 Avec::check_file(const char * filename)
 {
@@ -96,6 +99,7 @@ UCS_string ucs(utf);
 
    close(fd);
 }
+#endif
 //-----------------------------------------------------------------------------
 void
 Avec::init()
@@ -163,9 +167,9 @@ Avec::check_av_table()
             }
       }
 
-   check_file("../APL_chars");
-   check_file("../keyboard");
-   check_file("../keyboard1");
+// check_file("../APL_chars");
+// check_file("../keyboard");
+// check_file("../keyboard1");
 }
 //-----------------------------------------------------------------------------
 Unicode
@@ -185,19 +189,19 @@ Avec::get_av_pos(CHT_Index av)
 }
 //-----------------------------------------------------------------------------
 Token
-Avec::uni_to_token(Unicode uni)
+Avec::uni_to_token(Unicode uni, const char * loc)
 {
 CHT_Index idx = find_char(uni);
-   if (idx != Invalid_CHT)   return Token(character_table[idx].token, uni);
+   if (idx != Invalid_CHT)   return Token(character_table[idx].token_tag, uni);
 
    // not found: try alternative characters.
    //
    idx = map_alternative_char(uni);
-   if (idx != Invalid_CHT)   return Token(character_table[idx].token,
+   if (idx != Invalid_CHT)   return Token(character_table[idx].token_tag,
                                           character_table[idx].unicode);
 
-   CERR << endl << "Char " << UNI(uni) << " (" << uni
-        << ") not found in " << UNI_QUAD_QUAD << "AV" << endl;
+   CERR << endl << "Avec::uni_to_token() : Char " << UNI(uni) << " (" << uni
+        << ") not found in ⎕AV! (called from " << loc << ")" << endl;
 
    return Token();
 }
@@ -250,8 +254,8 @@ Avec::is_known_char(Unicode av)
 {
    switch(av)
       {
-#define char_def(n, u, t, f, p)  case u: 
-#define char_df1(n, u, t, f, p)  case u: 
+#define char_def(_n, u, _t, _f, _p)  case u: 
+#define char_df1(_n, u, _t, _f, _p)  case u: 
 #include "Avec.def"
           return true;
       }

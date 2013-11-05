@@ -10,6 +10,9 @@
 /* CIN color */
 #define CIN_COLOR_WANTED 27, 91, '0', ';', '3', '0', ';', '4', '7', 'm'
 
+/* clear to EOL */
+#define CLEAR_EOL_WANTED 27, 91, 'K'
+
 /* COUT color */
 #define COUT_COLOR_WANTED 27, 91, '0', ';', '3', '0', ';', '4', '8', 'm'
 
@@ -48,6 +51,12 @@
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
 
+/* Define to 1 if you have the `blas' library (-lblas). */
+#define HAVE_LIBBLAS 1
+
+/* Define to 1 if you have the `execinfo' library (-lexecinfo). */
+/* #undef HAVE_LIBEXECINFO */
+
 /* Define to 1 if you have the `intl' library (-lintl). */
 /* #undef HAVE_LIBINTL */
 
@@ -57,7 +66,10 @@
 /* Define to 1 if you have the `m' library (-lm). */
 #define HAVE_LIBM 1
 
-/* Define to 1 if you have the `readline' library (-lreadline). */
+/* Define to 1 if you have the `pthread' library (-lpthread). */
+#define HAVE_LIBPTHREAD 1
+
+/* Define if you have libreadline */
 #define HAVE_LIBREADLINE 1
 
 /* Define to 1 if you have the `rt' library (-lrt). */
@@ -134,7 +146,7 @@
 #define PACKAGE_NAME "GNU APL"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "GNU APL 1.0"
+#define PACKAGE_STRING "GNU APL 1.1"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "apl"
@@ -143,10 +155,13 @@
 #define PACKAGE_URL "http://www.gnu.org/software/apl/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.0"
+#define PACKAGE_VERSION "1.1"
 
 /* define to enable the print semaphore */
 /* #undef PRINT_SEMA_WANTED */
+
+/* default color */
+#define RESET_COLORS_WANTED 27, 91, '0', ';', '3', '8', ';', '4', '8', 'm'
 
 /* short value cellcount */
 #define SHORT_VALUE_LENGTH_WANTED 12
@@ -180,7 +195,7 @@
 /* #undef VALUE_CHECK_WANTED */
 
 /* Version number of package */
-#define VERSION "1.0"
+#define VERSION "1.1"
 
 /* define to enable tracing of value flags */
 /* #undef VF_TRACING_WANTED */

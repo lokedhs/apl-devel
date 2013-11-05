@@ -27,6 +27,7 @@ using namespace std;
 #include "Archive.hh"
 #include "Command.hh"
 #include "Input.hh"
+#include "LibPaths.hh"
 #include "Output.hh"
 #include "Quad_TF.hh"
 #include "UserFunction.hh"
@@ -571,8 +572,11 @@ Workspace::save_WS(ostream & out, vector<UCS_string> & lib_ws)
 
    // at this point, lib_ws.size() is 1 or 2.
 
-UCS_string wname = lib_ws[lib_ws.size() - 1];
-UTF8_string filename = Command::get_lib_file_path(lib_ws);
+LibRef libref = LIB_NONE;
+UCS_string wname = lib_ws.back();
+   if (lib_ws.size() == 2)   libref = (LibRef)(lib_ws.front().atoi());
+UTF8_string filename = LibPaths::get_lib_filename(libref, wname, false, "xml");
+
 
    // append an .xml extension unless there is one already
    //
@@ -639,6 +643,7 @@ XML_Saving_Archive ar(outf, *this);
    {
      const int offset = v_quad_TZ.get_offset();
      const YMDhmsu time(now());
+const char * tz_sign = (offset < 0) ? "" : "+";
 
      COUT << setfill('0') << time.year  << "-"
           << setw(2)      << time.month << "-"
@@ -646,7 +651,7 @@ XML_Saving_Archive ar(outf, *this);
           << setw(2)      << time.hour  << ":"
           << setw(2)      << time.minute << ":"
           << setw(2)      << time.second << " (GMT"
-          << offset/3600 << ")"
+          << tz_sign      << offset/3600 << ")"
           << setfill(' ') << endl;
    }
 }
@@ -661,8 +666,10 @@ Workspace::load_WS(ostream & out, const vector<UCS_string> & lib_ws)
         return UCS_string();
       }
 
-UCS_string wname = lib_ws[lib_ws.size() - 1];
-UTF8_string filename = Command::get_lib_file_path(lib_ws);
+LibRef libref = LIB_NONE;
+   if (lib_ws.size() == 2)   libref = (LibRef)(lib_ws.front().atoi());
+UCS_string wname = lib_ws.back();
+UTF8_string filename = LibPaths::get_lib_filename(libref, wname, true, "xml");
 
 XML_Loading_Archive in((const char *)filename.c_str(), *this);
 
@@ -723,8 +730,10 @@ const bool with_lib = Command::is_lib_ref(lib_ws_objects.front());
         lib_ws_objects.erase(lib_ws_objects.begin());
       }
 
-UCS_string wname = lib_ws[lib_ws.size() - 1];
-UTF8_string filename = Command::get_lib_file_path(lib_ws);
+LibRef libref = LIB_NONE;
+   if (lib_ws.size() == 2)   libref = (LibRef)(lib_ws.front().atoi());
+UCS_string wname = lib_ws.back();
+UTF8_string filename = LibPaths::get_lib_filename(libref, wname, true, "xml");
 
 XML_Loading_Archive in((const char *)filename.c_str(), *this);
 

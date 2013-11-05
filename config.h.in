@@ -9,6 +9,9 @@
 /* CIN color */
 #undef CIN_COLOR_WANTED
 
+/* clear to EOL */
+#undef CLEAR_EOL_WANTED
+
 /* COUT color */
 #undef COUT_COLOR_WANTED
 
@@ -47,6 +50,12 @@
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
+/* Define to 1 if you have the `blas' library (-lblas). */
+#undef HAVE_LIBBLAS
+
+/* Define to 1 if you have the `execinfo' library (-lexecinfo). */
+#undef HAVE_LIBEXECINFO
+
 /* Define to 1 if you have the `intl' library (-lintl). */
 #undef HAVE_LIBINTL
 
@@ -56,7 +65,10 @@
 /* Define to 1 if you have the `m' library (-lm). */
 #undef HAVE_LIBM
 
-/* Define to 1 if you have the `readline' library (-lreadline). */
+/* Define to 1 if you have the `pthread' library (-lpthread). */
+#undef HAVE_LIBPTHREAD
+
+/* Define if you have libreadline */
 #undef HAVE_LIBREADLINE
 
 /* Define to 1 if you have the `rt' library (-lrt). */
@@ -146,6 +158,9 @@
 
 /* define to enable the print semaphore */
 #undef PRINT_SEMA_WANTED
+
+/* default color */
+#undef RESET_COLORS_WANTED
 
 /* short value cellcount */
 #undef SHORT_VALUE_LENGTH_WANTED

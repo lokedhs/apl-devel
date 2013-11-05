@@ -35,7 +35,8 @@ Copyright (C) 2013 Free Software Foundation, Inc.-->
 <li><a href="#Chapter-1">1.1 Installing APL</a>
 <li><a href="#Chapter-1">1.2 Starting APL</a>
 <li><a href="#Chapter-1">1.3 Command Line Options</a>
-<li><a href="#Chapter-1">1.4 File Names and Paths</a>
+<li><a href="#Chapter-1">1.4 Config File for GNU APL</a>
+<li><a href="#Chapter-1">1.5 File Names and Paths</a>
 </li></ul>
 <li><a name="toc_Chapter-2" href="#Chapter-2">2 Non-standard Features</a>
 <ul>
@@ -309,7 +310,33 @@ options understood by APL applications.
 
    </ul>
 
-<h3 class="section">1.4 File Names and Paths</h3>
+<h3 class="section">1.4 Config File for GNU APL</h3>
+
+<p>The default values for some of the command line options discussed in the
+previous section can be set in a configuration file for GNU APL. The name
+of the configuration file is 'preferences' and it should live in one of
+the following directories:
+
+     <ul>
+<li>in the sub-directory gnu-apl.d of the system configuration directory, or
+
+     <li>in the sub-directory .gnu-apl of the user's home directory (as per $HOME).
+
+   </ul>
+
+   <p>The system configuration directory is usually /etc or /usr/local/etc and is
+configurable via <samp><span class="option">./configure --sysconfdir</span></samp>. An empty (i.e. all
+settings commented out) preferences file is being installed in the
+system configuration directory when GNU APL is installed. You can edit
+it or use it as a template to see which options can be controlled.
+
+   <p>If file 'preferences' exists in both directories, then the settings in
+$HOME/.gnu-apl/preferences override settings in, for example,
+/etc/gnu-apl.d/preferences.
+
+   <p>Command line options in turn override settings in 'preferences' files.
+
+<h3 class="section">1.5 File Names and Paths</h3>
 
 <p>The GNU APL interpreter is a binary file named apl. It is usually
 installed in directory /usr/bin/ or in /usr/local/bin/. The location
@@ -320,7 +347,7 @@ where apl is installed can be changed via ./configure options
 
      <ol type=1 start=1>
 <li>APL workspaces that can be manipulated with the )LOAD, )SAVE,
- and )COPY commands. APL workspaces are XML files and must have a
+ )COPY, and )DROP commands. APL workspaces are XML files and must have a
  file extension of .xml in order to be accepted by GNU APL. APL workspaces
  can only be exchanged between machines that all run GNU APL.
 
@@ -354,7 +381,15 @@ where apl is installed can be changed via ./configure options
 
    <p>)SAVE [lib] [name[.xml]]
 
+   <p>)COPY [lib] [name[.xml]]
+
+   <p>)PCOPY [lib] [name[.xml]]
+
+   <p>)DROP [lib] [name[.xml]]
+
    <p>)IN   [lib] name[.atf]
+
+   <p>)PIN   [lib] name[.atf]
 
    <p>)OUT  [lib] name[.atf]
 
@@ -364,7 +399,7 @@ where apl is installed can be changed via ./configure options
 
    <p>)WSID       [name]
 
-   <p>The rules how file names are constructed from the arguments of an APL
+   <p>The rules how file names are constructed from the argument(s) of an APL
 command are:
 
      <ol type=1 start=1>
@@ -399,10 +434,10 @@ directories:
 
    <p>9: library-root/wslib9/
 
-   <p>The command )LIBS shows the mapping between library numbers and paths, or
-sets a new lib-root.
+   <p>The command )LIBS without arguments shows the mapping between library
+numbers and paths. The command )LIBS with an argument sets a new lib-root.
 
-   <p>The command )LIB [lib] shows the files in library (i,, directory) lib.
+   <p>The command )LIB [lib] shows the files in library (i.e. directory) lib.
 
    <p>The directory library-root is computed as follows when the interpreter starts:
 
@@ -415,13 +450,24 @@ are directories, but for the computation of library-root files suffice.
    <p>If such a directory is found, then it is used as library-root; otherwise the
 current directory (i.e. ".") is used and converted to an absolute path.
 
-   <p>For example, if library-root id "." then the command
+   <p>For example, if library-root is "." then the command
 
    <p>)LOAD 2 test
 
    <p>will try to load the workspace file
 
    <p>./wslib2/test.xml
+
+   <p>Using a library root implies that all 10 library directories are contained
+in the same directory. This is good enough for single-user environments
+is often not adequate for multi-user environments where some directories
+are not writable by users and different users have different home directories.
+
+   <p>For that reason the above library root scheme can be overridden by the
+GNU APL configuration files (preferences). In these files you can uncomment
+any of the LIBREF-0 to LIBREF-9 settings (which correspond to library
+numbers 0 to 9) and provide your own paths. The library numbers NOT overridden
+in a 'preferences' file still follow the library root scheme.
 
 <!--  -->
 <div class="node">
@@ -497,14 +543,16 @@ vector:
 <pre class="verbatim">    /bin/apl --id 1010
 </pre>
 
-   <p>The other feature is the monadic system function ⎕ENV B which returns all
-environment variables whose name starts with B. If ⍴B is 0, like:
+   <p>A feature particularly useful for CGI scripting (where some information is
+passed to the APL script via environment variables) is the monadic system
+function ⎕ENV B. ⎕ENV B returns all environment variables whose name
+starts with B. If ⍴B is 0, like:
 
 <pre class="verbatim">    ⎕ENV ''
 </pre>
 
    <p>then all environment variables are returned. 
-The result of ⎕ENV is a 2-by-N matrix. 
+The result of ⎕ENV is a N-by-2 matrix. 
 The first column is the name of the environment variable. 
 The second column is the value of the variable. 
 The number N of environment variables returned obviously depends on
@@ -512,7 +560,39 @@ the number of environment variables whose name begins with the prefix
 given in B. B is case sensitive, but by convention the names of environment
 are uppercase.
 
-   <p>These two features together allow you to write Web pages in APL!
+   <p>If you need to create a longer text, like the body of a web page, then you
+would normally construct it like this:
+
+<pre class="verbatim">BODY ← ⊂ 'First line'
+BODY ← BODY , ⊂ 'Second line'
+BODY ← BODY , ⊂ 'Third line'
+   ...
+</pre>
+
+   <p>That is not very handy for longer texts. Instead you can write the following
+in an APL script:
+
+<pre class="verbatim">BODY←⎕INP 'END-OF-⎕INP'
+First line
+Second line
+Third line
+   ...
+END-OF-⎕INP
+</pre>
+
+   <p>This works like "Here documents" in bash. The right argument of ⎕INP is
+the end of text marker, ⎕INP also has a dyadic form where the left argument
+specifies an escape sequence from text to apl and back to the text, similar
+to PHP scripts:
+
+   <p>'&lt;?apl' '?&gt;' ⎕INP 'END-OF-⎕INP'
+First line
+Time is now: &lt;?apl ⍕⎕TS ?&gt;
+Third line
+... 
+END-OF-⎕INP
+
+   <p>These features together allow you to write Web pages in APL!
 
 <h4 class="subsection">2.1.3 Script Example</h4>
 
@@ -548,7 +628,6 @@ is not indented.
 <pre class="verbatim">      #! /bin/apl --script --
       
       ⎕ARG      ⍝ show command line options
- /bin/apl --silent 
       )OFF      ⍝ leave the interpreter
 
 

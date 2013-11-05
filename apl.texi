@@ -278,6 +278,35 @@ All command line options after @code{--} are ignored by the interpreter
 
 @end itemize
 
+@section Config File for GNU APL
+
+The default values for some of the command line options discussed in the
+previous section can be set in a configuration file for GNU APL. The name
+of the configuration file is 'preferences' and it should live in one of
+the following directories:
+
+@itemize
+
+@item
+in the sub-directory gnu-apl.d of the system configuration directory, or
+
+@item
+in the sub-directory .gnu-apl of the user's home directory (as per $HOME).
+
+@end itemize
+
+The system configuration directory is usually /etc or /usr/local/etc and is
+configurable via @option{./configure --sysconfdir}. An empty (i.e. all
+settings commented out) preferences file is being installed in the
+system configuration directory when GNU APL is installed. You can edit
+it or use it as a template to see which options can be controlled.
+
+If file 'preferences' exists in both directories, then the settings in
+$HOME/.gnu-apl/preferences override settings in, for example,
+/etc/gnu-apl.d/preferences.
+
+Command line options in turn override settings in 'preferences' files.
+
 @section File Names and Paths
 
 The GNU APL interpreter is a binary file named apl. It is usually
@@ -289,7 +318,7 @@ GNU APL understands 4 file types:
 
 @enumerate
 @item APL workspaces that can be manipulated with the )LOAD, )SAVE,
- and )COPY commands. APL workspaces are XML files and must have a
+ )COPY, and )DROP commands. APL workspaces are XML files and must have a
  file extension of .xml in order to be accepted by GNU APL. APL workspaces
  can only be exchanged between machines that all run GNU APL.
 
@@ -323,7 +352,15 @@ The following APL commands are related to file names:
 
 )SAVE [lib] [name[.xml]]
 
+)COPY [lib] [name[.xml]]
+
+)PCOPY [lib] [name[.xml]]
+
+)DROP [lib] [name[.xml]]
+
 )IN   [lib] name[.atf]
+
+)PIN   [lib] name[.atf]
 
 )OUT  [lib] name[.atf]
 
@@ -333,7 +370,7 @@ The following APL commands are related to file names:
 
 )WSID       [name]
 
-The rules how file names are constructed from the arguments of an APL
+The rules how file names are constructed from the argument(s) of an APL
 command are:
 
 @enumerate
@@ -368,10 +405,10 @@ directories:
 
     9: library-root/wslib9/
 
-The command )LIBS shows the mapping between library numbers and paths, or
-sets a new lib-root.
+The command )LIBS without arguments shows the mapping between library
+numbers and paths. The command )LIBS with an argument sets a new lib-root.
 
-The command )LIB [lib] shows the files in library (i,, directory) lib.
+The command )LIB [lib] shows the files in library (i.e. directory) lib.
 
 The directory library-root is computed as follows when the interpreter starts:
 
@@ -384,13 +421,24 @@ are directories, but for the computation of library-root files suffice.
 If such a directory is found, then it is used as library-root; otherwise the
 current directory (i.e. ".") is used and converted to an absolute path.
 
-For example, if library-root id "." then the command
+For example, if library-root is "." then the command
 
 )LOAD 2 test
 
 will try to load the workspace file
 
 ./wslib2/test.xml
+
+Using a library root implies that all 10 library directories are contained
+in the same directory. This is good enough for single-user environments 
+is often not adequate for multi-user environments where some directories
+are not writable by users and different users have different home directories.
+
+For that reason the above library root scheme can be overridden by the
+GNU APL configuration files (preferences). In these files you can uncomment
+any of the LIBREF-0 to LIBREF-9 settings (which correspond to library
+numbers 0 to 9) and provide your own paths. The library numbers NOT overridden
+in a 'preferences' file still follow the library root scheme.
 
 @c ----------------------------------------------------------------------------
 @node Chapter 2
@@ -463,15 +511,17 @@ vector:
     /bin/apl --id 1010
 @end verbatim
 
-The other feature is the monadic system function ⎕ENV B which returns all
-environment variables whose name starts with B. If ⍴B is 0, like:
+A feature particularly useful for CGI scripting (where some information is
+passed to the APL script via environment variables) is the monadic system
+function ⎕ENV B. ⎕ENV B returns all environment variables whose name
+starts with B. If ⍴B is 0, like:
 
 @verbatim
     ⎕ENV ''
 @end verbatim
 
 then all environment variables are returned.
-The result of ⎕ENV is a 2-by-N matrix.
+The result of ⎕ENV is a N-by-2 matrix.
 The first column is the name of the environment variable.
 The second column is the value of the variable.
 The number N of environment variables returned obviously depends on
@@ -479,7 +529,41 @@ the number of environment variables whose name begins with the prefix
 given in B. B is case sensitive, but by convention the names of environment
 are uppercase.
 
-These two features together allow you to write Web pages in APL!
+If you need to create a longer text, like the body of a web page, then you
+would normally construct it like this:
+
+@verbatim
+BODY ← ⊂ 'First line'
+BODY ← BODY , ⊂ 'Second line'
+BODY ← BODY , ⊂ 'Third line'
+   ...
+@end verbatim
+
+That is not very handy for longer texts. Instead you can write the following
+in an APL script:
+
+@verbatim
+BODY←⎕INP 'END-OF-⎕INP'
+First line
+Second line
+Third line
+   ...
+END-OF-⎕INP
+@end verbatim
+
+This works like "Here documents" in bash. The right argument of ⎕INP is
+the end of text marker, ⎕INP also has a dyadic form where the left argument
+specifies an escape sequence from text to apl and back to the text, similar
+to PHP scripts:
+
+'<?apl' '?>' ⎕INP 'END-OF-⎕INP'
+First line
+Time is now: <?apl ⍕⎕TS ?>
+Third line
+...
+END-OF-⎕INP
+
+These features together allow you to write Web pages in APL!
 
 @subsection Script Example
 Note that the two different ways of running an APL script have an impact on
@@ -517,7 +601,6 @@ is not indented.
       #! /bin/apl --script --
       
       ⎕ARG      ⍝ show command line options
- /bin/apl --silent 
       )OFF      ⍝ leave the interpreter
 
 

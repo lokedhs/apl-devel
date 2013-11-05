@@ -3,6 +3,28 @@ The APL interpreter can be configured by means of ./configure options (see
 also file INSTALL in this folder). In addition to the standard options that
 are described in INSTALL, the following options are recognized:
 
+--without-readline
+    GNU APL uses libreadline for reading APL characters from the keyboard.
+    This only works when Unicode characters are supported by libreadline.
+    On most systems that is the case; on some systems, for example FreeBSD,
+    it is not. If Unicode is not supported, then you can either install a
+    different libreadline, or ./configure GNU APL with --without-readline.
+    Most likely you will then --disable-nls as well. Example:
+
+    ./configure --without-readline --disable-nls
+
+
+--disable-nls
+    Sometimes internationalization and localization support causes problems
+    with APL characters when the locale settings are wrong or locale support
+    in general is broken, and it can be cumbersome to fix such problems.
+
+    Given the very few languages supported by GNU APL (English and German),
+    it is much easier to disable native language support completely with
+    --disable-nls. Example:
+
+    ./configure --disable-nls
+
 
 ASSERT_LEVEL_WANTED=n
    There are numerous Assert() and Assert1 macros in the source code of the
@@ -23,13 +45,17 @@ ASSERT_LEVEL_WANTED=n
     ./configure ASSERT_LEVEL_WANTED=2
 
 
-CERR_COLOR_WANTED=0
-CIN_COLOR_WANTED=0
-COUT_COLOR_WANTED=0
-CERR_COLOR_WANTED=27,91,48,59,51,53,59,52,56,109
-CIN_COLOR_WANTED= 27,91,48,59,51,48,59,52,55,109
-COUT_COLOR_WANTED=27,91,48,59,51,48,59,52,56,109
-                                 ^^       ^^
+   CIN_COLOR_WANTED=0
+  CERR_COLOR_WANTED=0
+  COUT_COLOR_WANTED=0
+RESET_COLORS_WANTED=0
+   CLEAR_EOL_WANTED=0
+   CLEAR_EOL_WANTED=27,4B
+   CIN_COLOR_WANTED=27,91,48,59,51,48,59,52,55,109
+  CERR_COLOR_WANTED=27,91,48,59,51,53,59,52,56,109
+  COUT_COLOR_WANTED=27,91,48,59,51,48,59,52,56,109
+RESET_COLORS_WANTED=27,91,48,59,51,56,59,52,56,109
+                                   ^^       ^^
    The APL interpreter uses different colors for the cin (standard input),
    cout (standard output) and cerr (standard error) channels. Setting all
    colors to 0 disables color support. Setting some (but not all) colors to 0
@@ -37,6 +63,17 @@ COUT_COLOR_WANTED=27,91,48,59,51,48,59,52,56,109
    favorite colors. The above numbers are escape sequences for ANSI terminals
    (CERR = red on white background, CIN = black on dark white background, and
    COUT = black on white background on GNU/Linux xterms).
+
+   After every color seqence, an clear to end of line sequence is sent to
+   the terminal so that the entire line gets the desired color (otherwise
+   only the output itself would be coloured and the rest of the line would
+   remain in the background color). Set this to 0 if you disable colors.
+
+  When the interpreter is finished, then the reset colors sequence is sent,
+  followed by the clear to end of line sequence. Set this to 0 if you
+  disable colors. Example (disable colors):
+
+    ./configure CIN_COLOR_WANTED=0 CERR_COLOR_WANTED=0 COUT_COLOR_WANTED=0 RESET_COLORS_WANTED=0 CLEAR_EOL_WANTED=0
 
 
 DYNAMIC_LOG_WANTED=yes

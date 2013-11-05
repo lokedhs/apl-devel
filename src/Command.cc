@@ -31,6 +31,7 @@
 #include "IndexExpr.hh"
 #include "IntCell.hh"
 #include "Input.hh"
+#include "LibPaths.hh"
 #include "main.hh"
 #include "Nabla.hh"
 #include "Output.hh"
@@ -45,6 +46,10 @@
 #include "UserFunction.hh"
 #include "Value.hh"
 #include "Workspace.hh"
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 //-----------------------------------------------------------------------------
 void
@@ -301,44 +306,6 @@ const Executable * statements = 0;
 }
 //-----------------------------------------------------------------------------
 void 
-Command::cmd_HELP(ostream & out)
-{
-   out << _("Commands are:") << endl;
-#define cmd_def(cmd_str, _cod, arg) \
-   CERR << "       " cmd_str " " #arg << endl;
-#include "Command.def"
-   out << endl;
-}
-//-----------------------------------------------------------------------------
-void 
-Command::cmd_LOG(ostream & out, const UCS_string & arg)
-{
-#ifdef DYNAMIC_LOG_WANTED
-
-   log_control(arg);
-
-#else
-
-   out << "\n"
-<< _("Command ]LOG is not available, since dynamic logging was not\n"
-"configured for this APL interpreter. To enable dynamic logging (which\n"
-"will decrease performance), recompile the interpreter as follows:")
-
-<< "\n\n"
-"   ./configure DYNAMIC_LOG_WANTED=yes (... "
-<< _("other configure options")
-<< ")\n"
-"   make\n"
-"   make install (or try: src/apl)\n"
-"\n"
-
-<< _("above the src directory.")
-<< "\n";
-
-#endif
-}
-//-----------------------------------------------------------------------------
-void 
 Command::cmd_CHECK(ostream & out)
 {
    // erase stale functions from failed ⎕EX
@@ -378,86 +345,6 @@ Command::cmd_CHECK(ostream & out)
    }
 }
 //-----------------------------------------------------------------------------
-UTF8_string
-Command::get_lib_file_path(const vector<UCS_string> & lib_file)
-{
-   // if nothing nothing is provided: return library root
-   //
-   if (lib_file.size() == 0)   return UTF8_string(get_APL_lib_root());
-
-   // if only a file name is provided: return file in library "",
-   // unless the path is absolute
-   //
-   if (lib_file.size() == 1)
-      {
-        const UCS_string & file = lib_file[0];
-        if (file[0] == '/')   return UTF8_string(file);
-        UCS_string path = get_library_path("");
-        path += Unicode('/');
-        path += file;
-        return UTF8_string(path);
-      }
-
-   // both lib and file provided
-   //
-const UCS_string & lib  = lib_file[0];
-const UCS_string & file = lib_file[1];
-UCS_string path = get_library_path(lib);
-   path += Unicode('/');
-   path += file;
-   return UTF8_string(path);
-}
-//-----------------------------------------------------------------------------
-UTF8_string
-Command::get_library_path(const UCS_string & libref)
-{
-UCS_string path;
-
-   if (libref.size() == 0)               // no argument: workspaces
-      {
-        path = get_APL_lib_root();
-        path.app((const UTF8 *)"/workspaces");
-      }
-   else if (Avec::is_digit(libref[0]))   // number: workspaces or wslibN
-      {
-        const int lib_num = libref.atoi();
-        path = get_APL_lib_root();
-        if (lib_num)   // path/wslibN
-           {
-             path.app((const UTF8 *)"/wslib");
-             path.append_number(lib_num);
-           }
-        else           // path/workspaces
-           {
-             path.app((const UTF8 *)"/workspaces");
-           }
-      }
-   else                                  // path argument
-      {
-        loop(l, libref.size())
-           {
-             if (libref[l] > ' ')   path += libref[l];
-             else                   break;
-           }
-      }
-
-   // canonicalize path
-   //
-char resolved[PATH_MAX + 2] = "";
-   {
-     UTF8_string path_utf(path);
-
-     // realpath() seems to return NULL if resolved is non-null even if
-     // no error has occurred. At the same time it complains if the return
-     // value is not checked.
-     //
-     const void * unused = realpath((const char *)path_utf.c_str(), resolved);
-     resolved[PATH_MAX] = 0;
-   }
-
-   return UTF8_string(resolved);
-}
-//-----------------------------------------------------------------------------
 void 
 Command::cmd_CONTINUE(ostream & out)
 {
@@ -466,19 +353,6 @@ Command::cmd_CONTINUE(ostream & out)
 vector<UCS_string> vcont;
    Workspace::the_workspace->save_WS(out, vcont);
    cmd_OFF(0);
-}
-//-----------------------------------------------------------------------------
-void 
-Command::cmd_MORE(ostream & out)
-{
-   if (Workspace::the_workspace->more_error.size() == 0)
-      {
-        out << _("NO MORE ERROR INFO") << endl;
-        return;
-      }
-
-   out << Workspace::the_workspace->more_error << endl;
-   return;
 }
 //-----------------------------------------------------------------------------
 void 
@@ -498,7 +372,8 @@ Command::cmd_DROP(ostream & out, const vector<UCS_string> & lib_ws)
         t4 = UCS_string(_("missing workspace name in command )DROP"));
         return;
       }
-   else if (lib_ws.size() > 2)   // too many arguments
+
+   if (lib_ws.size() > 2)   // too many arguments
       {
         out << _("BAD COMMAND") << endl;
         UCS_string & t4 = Workspace::the_workspace->more_error;
@@ -507,23 +382,13 @@ Command::cmd_DROP(ostream & out, const vector<UCS_string> & lib_ws)
         return;
       }
 
-   // at this point, lib_ws.size() is 1 or 2.
-
-UCS_string wname = lib_ws[lib_ws.size() - 1];
-UTF8_string filename = Command::get_lib_file_path(lib_ws);
-
-   // append an .xml extension unless there is one already
+   // at this point, lib_ws.size() is 1 or 2. If 2 then the first
+   // is the lib number
    //
-   if (filename.size() < 5                  ||
-       filename[filename.size() - 4] != '.' ||
-       filename[filename.size() - 3] != 'x' ||
-       filename[filename.size() - 2] != 'm' ||
-       filename[filename.size() - 1] != 'l' )
-      {
-        // filename does not end with .xml, so we try filename.xml
-        //
-        filename += UTF8_string(".xml");
-      }
+LibRef libref = LIB_NONE;
+UCS_string wname = lib_ws.back();
+   if (lib_ws.size() == 2)   libref = (LibRef)(lib_ws.front().atoi());
+UTF8_string filename = LibPaths::get_lib_filename(libref, wname, true, "xml");
 
 int result = unlink((const char *)filename.c_str());
    if (result)
@@ -536,40 +401,189 @@ int result = unlink((const char *)filename.c_str());
       }
 }
 //-----------------------------------------------------------------------------
+void
+Command::cmd_ERASE(ostream & out, vector<UCS_string> & args)
+{
+   Workspace::the_workspace->erase_symbols(CERR, args);
+}
+//-----------------------------------------------------------------------------
+void 
+Command::cmd_KEYB()
+{
+   CERR << _("US Keyboard Layout:") <<      "\n"
+                                            "\n"
+"╔════╦════╦════╦════╦════╦════╦════╦════╦════╦════╦════╦════╦════╦═════════╗\n"
+"║ ~⍨ ║ !¡ ║ @€ ║ #£ ║ $⍧ ║ %  ║ ^  ║ &  ║ *⍂ ║ (⍱ ║ )⍲ ║ _≡ ║ +⌹ ║         ║\n"
+"║ `◊ ║ 1¨ ║ 2¯ ║ 3< ║ 4≤ ║ 5= ║ 6≥ ║ 7> ║ 8≠ ║ 9∨ ║ 0∧ ║ -× ║ =÷ ║ BACKSP  ║\n"
+"╠════╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦══════╣\n"
+"║       ║ Q¿ ║ W⌽ ║ E⍷ ║ R  ║ T⍉ ║ Y¥ ║ U  ║ I⍸ ║ O⍥ ║ P⍟ ║ {  ║ }⍬ ║  |⍀  ║\n"
+"║  TAB  ║ q? ║ w⍵ ║ e∈ ║ r⍴ ║ t∼ ║ y↑ ║ u↓ ║ i⍳ ║ o○ ║ p⋆ ║ [← ║ ]→ ║  \\⍝  ║\n"
+"╠═══════╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩══════╣\n"
+"║ (CAPS   ║ A⊖ ║ S  ║ D  ║ F⍫ ║ G⍒ ║ H⍋ ║ J⍤ ║ K⌺ ║ L⍞ ║ :  ║ \"  ║         ║\n"
+"║  LOCK)  ║ a⍺ ║ s⌈ ║ d⌊ ║ f_ ║ g∇ ║ h∆ ║ j∘ ║ k' ║ l⎕ ║ ;⊢ ║ '⊣ ║ RETURN  ║\n"
+"╠═════════╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═════════╣\n"
+"║             ║ Z  ║ X  ║ C⍝ ║ V  ║ B⍎ ║ N⍕ ║ M⌶ ║ <⍪ ║ >⍙ ║ ?⌿ ║          ║\n"
+"║  SHIFT      ║ z⊂ ║ x⊃ ║ c∩ ║ v∪ ║ b⊥ ║ n⊤ ║ m| ║ ,⌷ ║ .⍎ ║ /⍕ ║  SHIFT   ║\n"
+"╚═════════════╩════╩════╩════╩════╩════╩════╩════╩════╩════╩════╩══════════╝\n"
+   << endl;
+}
+//-----------------------------------------------------------------------------
+void 
+Command::cmd_HELP(ostream & out)
+{
+   out << _("Commands are:") << endl;
+#define cmd_def(cmd_str, _cod, arg) \
+   CERR << "       " cmd_str " " #arg << endl;
+#include "Command.def"
+   out << endl;
+}
+//-----------------------------------------------------------------------------
+void
+Command::cmd_HOST(ostream & out, const UCS_string & arg)
+{
+UTF8_string host_cmd(arg);
+FILE * pipe = popen((const char *)host_cmd.c_str(), "r");
+   if (pipe == 0)   // popen failed
+      {
+        out << _(")HOST command failed: ") << strerror(errno) << endl;
+        return;
+      }
+
+   for (;;)
+       {
+         const int cc = fgetc(pipe);
+         if (cc == EOF)   break;
+         out << (char)cc;
+       }
+
+int result = pclose(pipe);
+   out << endl << IntCell(result) << endl;
+}
+//-----------------------------------------------------------------------------
+void
+Command::cmd_IN(ostream & out, vector<UCS_string> & args, bool protection)
+{
+   if (args.size() == 0)
+      {
+        out << _("BAD COMMAND") << endl;
+        Workspace::the_workspace->more_error =
+                   UCS_string(_("missing filename in command )IN"));
+        return;
+      }
+
+UCS_string fname = args.front();
+   args.erase(args.begin());
+
+UTF8_string filename = LibPaths::get_lib_filename(LIB_NONE, fname, true, "atf");
+
+FILE * in = fopen((const char *)(filename.c_str()), "r");
+   if (in == 0)   // open failed: try filename.atf unless already .atf
+      {
+        CERR << ")IN " << fname << _(" failed: ") << strerror(errno) << endl;
+
+        char cc[200];
+        snprintf(cc, sizeof(cc),
+                 _("command )IN: could not open file %s for reading: %s"),
+                 fname.c_str(), strerror(errno));
+        Workspace::the_workspace->more_error = UCS_string(cc);
+        return;
+      }
+
+UTF8 buffer[80];
+int idx = 0;
+
+transfer_context tctx(protection);
+
+bool new_record = true;
+
+   for (;;)
+      {
+        const int cc = fgetc(in);
+        if (cc == EOF)   break;
+        if (idx == 0 && cc == 0x0A)   // optional LF
+           {
+             // CERR << "CRLF" << endl;
+             continue;
+           }
+
+        if (idx < 80)
+           {
+              if (idx < 72)   buffer[idx++] = cc;
+              else            buffer[idx++] = 0;
+             continue;
+           }
+
+        if (cc == 0x0D || cc == 0x15)   // ASCII or EBCDIC
+           {
+             tctx.is_ebcdic = (cc == 0x15);
+             tctx.process_record(buffer, args);
+
+             idx = 0;
+             ++tctx.recnum;
+             continue;
+           }
+
+        CERR << _("BAD record charset (neither ASCII nor EBCDIC)") << endl;
+        break;
+      }
+
+   fclose(in);
+}
+//-----------------------------------------------------------------------------
 void 
 Command::cmd_LIBS(ostream & out, const vector<UCS_string> & lib_ref)
 {
+   // Command is:
+   //
+   // )LIB path           (set root to path)
+   // )LIB                (display root and path states)
+   //
    if (lib_ref.size() > 0)   // set path
       {
         UTF8_string utf(lib_ref[0]);
-        set_APL_lib_root((const char *)utf.c_str());
+        LibPaths::set_APL_lib_root((const char *)utf.c_str());
         out << "LIBRARY ROOT SET TO " << lib_ref[0] << endl;
         return;
       }
 
-UTF8_string path = get_library_path("");
-const int col_len = path.size();
+   out << "Library root: " << LibPaths::get_APL_lib_root() << 
+"\n"
+"\n"
+"Library reference number mapping:\n"
+"\n"
+"---------------------------------------------------------------------------\n"
+"Ref Conf  Path                                                State   Err\n"
+"---------------------------------------------------------------------------\n";
+         
 
-   out << "Library root: " << get_APL_lib_root() << endl
-       << "Library numbers:" << endl;
-
-const char * dirs[] = { "", "1", "2", "3", "4", "5", "6", "7", "8", "9", 0 };
-   for (const char ** d = dirs; *d; ++d)
+   loop(d, 10)
        {
-          path = get_library_path(*d);
-          if (**d)   out << " " << *d << "    ";
-          else       out << "none  ";
-          out << left << setw(col_len) << (const char *)path.c_str();
+          UTF8_string path = LibPaths::get_lib_dir((LibRef)d);
+          out << " " << d << " ";
+          switch(LibPaths::get_cfg_src((LibRef)d))
+             {
+                case LibPaths::LibDir::CS_NONE:      out << "NONE" << endl;
+                                                     continue;
+                case LibPaths::LibDir::CS_ENV:       out << "ENV   ";   break;
+                case LibPaths::LibDir::CS_ARGV0:     out << "BIN   ";   break;
+                case LibPaths::LibDir::CS_PREF_SYS:  out << "PSYS  ";   break;
+                case LibPaths::LibDir::CS_PREF_HOME: out << "PUSER ";   break;
+             }
+
+        out << left << setw(52) << path.c_str();
         DIR * dir = opendir((const char *)path.c_str());
         if (dir)   { out << " present" << endl;   closedir(dir); }
-        else       { out << " " << strerror(errno) << endl;      }
+        else       { out << " missing (" << errno << ")" << endl; }
       }
+
+   out <<
+"===========================================================================\n" << endl;
 }
 //-----------------------------------------------------------------------------
 void 
 Command::cmd_LIB(ostream & out, const UCS_string & arg)
 {
-UTF8_string path = get_library_path(arg);
+UTF8_string path = LibPaths::get_lib_dir((LibRef)(arg.atoi()));
 
 DIR * dir = opendir((const char *)path.c_str());
    if (dir == 0)
@@ -614,143 +628,53 @@ DIR * dir = opendir((const char *)path.c_str());
 }
 //-----------------------------------------------------------------------------
 void 
+Command::cmd_LOG(ostream & out, const UCS_string & arg)
+{
+#ifdef DYNAMIC_LOG_WANTED
+
+   log_control(arg);
+
+#else
+
+   out << "\n"
+<< _("Command ]LOG is not available, since dynamic logging was not\n"
+"configured for this APL interpreter. To enable dynamic logging (which\n"
+"will decrease performance), recompile the interpreter as follows:")
+
+<< "\n\n"
+"   ./configure DYNAMIC_LOG_WANTED=yes (... "
+<< _("other configure options")
+<< ")\n"
+"   make\n"
+"   make install (or try: src/apl)\n"
+"\n"
+
+<< _("above the src directory.")
+<< "\n";
+
+#endif
+}
+//-----------------------------------------------------------------------------
+void 
+Command::cmd_MORE(ostream & out)
+{
+   if (Workspace::the_workspace->more_error.size() == 0)
+      {
+        out << _("NO MORE ERROR INFO") << endl;
+        return;
+      }
+
+   out << Workspace::the_workspace->more_error << endl;
+   return;
+}
+//-----------------------------------------------------------------------------
+void 
 Command::cmd_OFF(int exit_val)
 {
    cleanup();
    COUT << endl;
    if (!silent)   COUT << _("Goodbye.") << endl;;
    exit(exit_val);
-}
-//-----------------------------------------------------------------------------
-void 
-Command::cmd_KEYB()
-{
-   CERR << _("US Keyboard Layout:") <<      "\n"
-                                            "\n"
-"╔════╦════╦════╦════╦════╦════╦════╦════╦════╦════╦════╦════╦════╦═════════╗\n"
-"║ ~⍨ ║ !¡ ║ @€ ║ #£ ║ $⍧ ║ %  ║ ^  ║ &  ║ *⍂ ║ (⍱ ║ )⍲ ║ _≡ ║ +⌹ ║         ║\n"
-"║ `◊ ║ 1¨ ║ 2¯ ║ 3< ║ 4≤ ║ 5= ║ 6≥ ║ 7> ║ 8≠ ║ 9∨ ║ 0∧ ║ -× ║ =÷ ║ BACKSP  ║\n"
-"╠════╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦═╩══╦══════╣\n"
-"║       ║ Q¿ ║ W⌽ ║ E⍷ ║ R  ║ T⍉ ║ Y¥ ║ U  ║ I⍸ ║ O⍥ ║ P⍟ ║ {  ║ }  ║  |⍀  ║\n"
-"║  TAB  ║ q? ║ w⍵ ║ e∈ ║ r⍴ ║ t∼ ║ y↑ ║ u↓ ║ i⍳ ║ o○ ║ p⋆ ║ [← ║ ]→ ║  \\⍝  ║\n"
-"╠═══════╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩═╦══╩══════╣\n"
-"║ (CAPS   ║ A⊖ ║ S  ║ D  ║ F⍫ ║ G⍒ ║ H⍋ ║ J⍤ ║ K⌺ ║ L⍞ ║ :  ║ \"  ║         ║\n"
-"║  LOCK)  ║ a⍺ ║ s⌈ ║ d⌊ ║ f_ ║ g∇ ║ h∆ ║ j∘ ║ k' ║ l⎕ ║ ;⊢ ║ '⊣ ║ RETURN  ║\n"
-"╠═════════╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═══╦╩═════════╣\n"
-"║             ║ Z  ║ X  ║ C⍝ ║ V  ║ B⍎ ║ N⍕ ║ M⌶ ║ <⍪ ║ >⍙ ║ ?⌿ ║          ║\n"
-"║  SHIFT      ║ z⊂ ║ x⊃ ║ c∩ ║ v∪ ║ b⊥ ║ n⊤ ║ m| ║ ,⌷ ║ .⍎ ║ /⍕ ║  SHIFT   ║\n"
-"╚═════════════╩════╩════╩════╩════╩════╩════╩════╩════╩════╩════╩══════════╝\n"
-   << endl;
-}
-//-----------------------------------------------------------------------------
-void
-Command::cmd_HOST(ostream & out, const UCS_string & arg)
-{
-UTF8_string host_cmd(arg);
-FILE * pipe = popen((const char *)host_cmd.c_str(), "r");
-   if (pipe == 0)   // popen failed
-      {
-        out << _(")HOST command failed: ") << strerror(errno) << endl;
-        return;
-      }
-
-   for (;;)
-       {
-         const int cc = fgetc(pipe);
-         if (cc == EOF)   break;
-         out << (char)cc;
-       }
-
-int result = pclose(pipe);
-   out << endl << IntCell(result) << endl;
-}
-//-----------------------------------------------------------------------------
-void
-Command::cmd_IN(ostream & out, vector<UCS_string> & args, bool protection)
-{
-   if (args.size() == 0)
-      {
-        out << _("BAD COMMAND") << endl;
-        Workspace::the_workspace->more_error =
-                   UCS_string(_("missing filename in command )IN"));
-        return;
-      }
-
-UCS_string fname = args.front();
-   args.erase(args.begin());
-
-vector<UCS_string> lib_ws;
-   lib_ws.push_back(fname);
-UTF8_string filename = get_lib_file_path(lib_ws);
-
-FILE * in = fopen((const char *)(filename.c_str()), "r");
-   if (in == 0)   // open failed: try filename.atf unless already .atf
-      {
-        if (filename.size() < 5                  ||
-            filename[filename.size() - 4] != '.' ||
-            filename[filename.size() - 3] != 'a' ||
-            filename[filename.size() - 2] != 't' ||
-            filename[filename.size() - 1] != 'f' )
-           {
-             // filename does not end with .atf, so we try filename.atf
-             //
-             filename += UTF8_string(".atf");
-             in = fopen((const char *)(filename.c_str()), "r");
-           }
-
-        if (in == 0)   // open failed again: give up
-           {
-             CERR << ")IN " << fname << _(" failed: ")
-                  << strerror(errno) << endl;
-
-             char cc[200];
-             snprintf(cc, sizeof(cc),
-                      _("command )IN: could not open file %s for reading: %s"),
-                      fname.c_str(), strerror(errno));
-             Workspace::the_workspace->more_error = UCS_string(cc);
-             return;
-           }
-      }
-
-UTF8 buffer[80];
-int idx = 0;
-
-transfer_context tctx(protection);
-
-bool new_record = true;
-
-   for (;;)
-      {
-        const int cc = fgetc(in);
-        if (cc == EOF)   break;
-        if (idx == 0 && cc == 0x0A)   // optional LF
-           {
-             // CERR << "CRLF" << endl;
-             continue;
-           }
-
-        if (idx < 80)
-           {
-              if (idx < 72)   buffer[idx++] = cc;
-              else            buffer[idx++] = 0;
-             continue;
-           }
-
-        if (cc == 0x0D || cc == 0x15)   // ASCII or EBCDIC
-           {
-             tctx.is_ebcdic = (cc == 0x15);
-             tctx.process_record(buffer, args);
-
-             idx = 0;
-             ++tctx.recnum;
-             continue;
-           }
-
-        CERR << _("BAD record charset (neither ASCII nor EBCDIC)") << endl;
-        break;
-      }
-
-   fclose(in);
 }
 //-----------------------------------------------------------------------------
 void
@@ -767,23 +691,8 @@ Command::cmd_OUT(ostream & out, vector<UCS_string> & args)
 UCS_string fname = args.front();
    args.erase(args.begin());
 
-vector<UCS_string> lib_ws;
-   lib_ws.push_back(fname);
-UTF8_string filename = get_lib_file_path(lib_ws);
+UTF8_string filename = LibPaths::get_lib_filename(LIB_NONE, fname, false,"atf");
    
-   // append an .atf extension unless there is one already
-   //
-   if (filename.size() < 5                  ||
-       filename[filename.size() - 4] != '.' ||
-       filename[filename.size() - 3] != 'a' ||
-       filename[filename.size() - 2] != 't' ||
-       filename[filename.size() - 1] != 'f' )
-      {
-        // filename does not end with .atf, so we append .atf
-        //
-        filename += UTF8_string(".atf");
-      }
-
 FILE * atf = fopen((const char *)(filename.c_str()), "w");
    if (atf == 0)
       {
@@ -988,7 +897,7 @@ Symbol * sym = 0;
    Log(LOG_command_IN)
       {
         CERR << endl << var_name << " rank " << shape.get_rank() << " IS '";
-        for (int i = idx; idx < data.size(); ++i)   CERR << data[idx++];
+        loop(j, data.size() - idx)   CERR << data[idx + j];
         CERR << "'" << endl;
       }
 
@@ -1047,7 +956,7 @@ Symbol * sym = 0;
    Log(LOG_command_IN)
       {
         CERR << endl << var_name << " rank " << shape.get_rank() << " IS '";
-        for (int i = idx; idx < data.size(); ++i)   CERR << data[idx++];
+        loop(j, data.size() - idx)   CERR << data[idx + j];
         CERR << "'" << endl;
       }
 
@@ -1146,7 +1055,7 @@ const int cp_to_uni_map[128] = // see lrm fig 68.
   0x25CA, 0x2518, 0x250C, 0x2588, 0x2584, 0x00A6, 0x00CC, 0x2580,
   0x237A, 0x2379, 0x2282, 0x2283, 0x235D, 0x2372, 0x2374, 0x2371,
   0x233D, 0x2296, 0x25CB, 0x2228, 0x2373, 0x2349, 0x2208, 0x2229,
-  0x233F, 0x9024, 0x2265, 0x2264, 0x2260, 0x00D7, 0x00F7, 0x2359,
+  0x233F, 0x2340, 0x2265, 0x2264, 0x2260, 0x00D7, 0x00F7, 0x2359,
   0x2218, 0x2375, 0x236B, 0x234B, 0x2352, 0x00AF, 0x00A8, 0x00A0
 };
 
@@ -1176,19 +1085,19 @@ const struct _uni_to_cp_map
   { 0x22A3, 215 }, { 0x22A4, 152 }, { 0x22A5, 157 }, { 0x22F8, 209 },
   { 0x2308, 169 }, { 0x230A, 190 }, { 0x2336, 159 }, { 0x2337, 211 },
   { 0x2339, 146 }, { 0x233B, 213 }, { 0x233D, 232 }, { 0x233F, 240 },
-  { 0x2342, 212 }, { 0x2349, 237 }, { 0x234B, 251 }, { 0x234E, 175 },
-  { 0x2352, 252 }, { 0x2355, 174 }, { 0x2359, 247 }, { 0x235D, 228 },
-  { 0x235E, 145 }, { 0x235F, 181 }, { 0x236B, 250 }, { 0x2371, 231 },
-  { 0x2372, 229 }, { 0x2373, 236 }, { 0x2374, 230 }, { 0x2375, 249 },
-  { 0x2376, 158 }, { 0x2378, 208 }, { 0x2379, 225 }, { 0x237A, 224 },
-  { 0x2395, 144 }, { 0x2500, 196 }, { 0x2502, 179 }, { 0x250C, 218 },
-  { 0x2510, 191 }, { 0x2514, 192 }, { 0x2518, 217 }, { 0x251C, 195 },
-  { 0x2524, 180 }, { 0x252C, 194 }, { 0x2534, 193 }, { 0x253C, 197 },
-  { 0x2550, 205 }, { 0x2551, 186 }, { 0x2554, 201 }, { 0x2557, 187 },
-  { 0x255A, 200 }, { 0x255D, 188 }, { 0x2560, 204 }, { 0x2563, 185 },
-  { 0x2566, 203 }, { 0x2569, 202 }, { 0x256C, 206 }, { 0x2580, 223 },
-  { 0x2584, 220 }, { 0x2588, 219 }, { 0x2591, 176 }, { 0x2592, 177 },
-  { 0x2593, 178 }, { 0x25CA, 216 }, { 0x25CB, 234 }, { 0x9024, 241 }
+  { 0x2340, 241 }, { 0x2342, 212 }, { 0x2349, 237 }, { 0x234B, 251 },
+  { 0x234E, 175 }, { 0x2352, 252 }, { 0x2355, 174 }, { 0x2359, 247 },
+  { 0x235D, 228 }, { 0x235E, 145 }, { 0x235F, 181 }, { 0x236B, 250 },
+  { 0x2371, 231 }, { 0x2372, 229 }, { 0x2373, 236 }, { 0x2374, 230 },
+  { 0x2375, 249 }, { 0x2376, 158 }, { 0x2378, 208 }, { 0x2379, 225 },
+  { 0x237A, 224 }, { 0x2395, 144 }, { 0x2500, 196 }, { 0x2502, 179 },
+  { 0x250C, 218 }, { 0x2510, 191 }, { 0x2514, 192 }, { 0x2518, 217 },
+  { 0x251C, 195 }, { 0x2524, 180 }, { 0x252C, 194 }, { 0x2534, 193 },
+  { 0x253C, 197 }, { 0x2550, 205 }, { 0x2551, 186 }, { 0x2554, 201 },
+  { 0x2557, 187 }, { 0x255A, 200 }, { 0x255D, 188 }, { 0x2560, 204 },
+  { 0x2563, 185 }, { 0x2566, 203 }, { 0x2569, 202 }, { 0x256C, 206 },
+  { 0x2580, 223 }, { 0x2584, 220 }, { 0x2588, 219 }, { 0x2591, 176 },
+  { 0x2592, 177 }, { 0x2593, 178 }, { 0x25CA, 216 }, { 0x25CB, 234 }
 };
 
 void

@@ -30,8 +30,8 @@ struct Token;
 enum CHT_Index
 {
    Invalid_CHT = -1,
-#define char_def(n, u, t, f, p) AV_ ## n,
-#define char_df1(n, u, t, f, p)
+#define char_def( n, _u, _t, _f, _p) AV_ ## n,
+#define char_df1(_n, _u, _t, _f, _p)
 #include "Avec.def"
    MAX_AV,
 };
@@ -66,7 +66,7 @@ public:
    static uint32_t get_av_pos(CHT_Index av);
 
    /// Return a token containing \b av
-   static Token uni_to_token(Unicode av);
+   static Token uni_to_token(Unicode av, const char * loc);
 
    /// Return \b true iff \b av is a valid char in a user defined symbol
    static bool is_symbol_char(Unicode av);

@@ -8,13 +8,16 @@ dist_doc_DATA = README				\
 		README-3-keyboard		\
 		README-4-compliance		\
 		README-5-WINDOWS		\
+                README-6-porting		\
 		keyboard			\
 		keyboard1			\
 		apl.vim				\
 		apl.1				\
 		apl.html			\
 		apl.xmodmap
+		
 
+nobase_dist_sysconf_DATA = gnu-apl.d/preferences
 
 info_TEXINFOS = apl.texi
 
@@ -54,8 +57,9 @@ DOXY:
 .PHONY:	RPM
 RPM:	dist
 	make -C rpm $@
-	cp rpm/SRPMS/$(PACKAGE)-$(PACKAGE_VERSION)-0.src.rpm       ftp-upload/
-	cp rpm/RPMS/i386/$(PACKAGE)-$(PACKAGE_VERSION)-0.i386.rpm  ftp-upload/
+	mkdir -p ftp-upload
+	cp rpm/SRPMS/$(PACKAGE)-$(PACKAGE_VERSION)-0.src.rpm  ftp-upload/
+	cp rpm/RPMS/*/$(PACKAGE)-$(PACKAGE_VERSION)-0.*.rpm   ftp-upload/
 
 # source and binary Debian packages
 #
@@ -68,7 +72,8 @@ DEB:	dist
 	cd debian_tmp ; tar xf $(PACKAGE)_$(PACKAGE_VERSION).orig.tar.gz
 	cp apl.1 debian_tmp/$(distdir)/debian/manpage.1
 	cd debian_tmp/$(distdir) ; dpkg-buildpackage
-	cp debian_tmp/$(PACKAGE)_$(PACKAGE_VERSION)-1_i386.deb       ftp-upload/
+	mkdir -p ftp-upload
+	cp debian_tmp/$(PACKAGE)_$(PACKAGE_VERSION)-1_*.deb          ftp-upload/
 	cp debian_tmp/$(PACKAGE)_$(PACKAGE_VERSION)-1.debian.tar.gz  ftp-upload/
 
 
@@ -87,14 +92,16 @@ develop:
 #
 .PHONY:	SYNC
 SYNC:	dist
-	tar xvzf apl-1.0.tar.gz
-	cp -a apl-1.0/* ../savannah-repo-apl/trunk/
-	rm -Rf apl-1.0
+	tar xvzf apl-$(VERSION).tar.gz
+	cp -a apl-$(VERSION)/* ../savannah-repo-apl/trunk/
+	rm -Rf apl-$(VERSION)
+	cd ../savannah-repo-apl ; svn add .
 
 # build all packages and SYNC
 #
 .PHONY:	EXPO
 EXPO:
+	tools/check_src
 	svn -m "auto-commit by make EXPO" commit
 	svn update
 	cd src; source buildtag

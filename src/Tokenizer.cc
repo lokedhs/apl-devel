@@ -76,14 +76,13 @@ Source<Unicode> src(input);
         const Unicode uni = *src;
         if (uni == UNI_COMMENT)   break;
 
-        const Token tok = Avec::uni_to_token(uni);
+        const Token tok = Avec::uni_to_token(uni, LOC);
 
         Log(LOG_tokenize)
            {
              Source<Unicode> s1(src, 0, 24);
              CERR << "  tokenize(" <<  src.rest() << " chars) sees [tag "
-                  << HEX(tok.get_tag()) << " «"
-                  << uni << "»] " << s1;
+                  << tok.tag_name() << " «" << uni << "»] " << s1;
              if (src.rest() != s1.rest())   CERR << " ...";
              CERR << endl;
            }
@@ -140,7 +139,7 @@ Source<Unicode> src(input);
                         // or an operator:            e.g. +.*
                         //
                         const Unicode uni_1 = src[1];
-                        const Token tok_1 = Avec::uni_to_token(uni_1);
+                        const Token tok_1 = Avec::uni_to_token(uni_1, LOC);
                         if ((tok_1.get_tag() & TC_MASK) == TC_NUMERIC)
                            tokenize_number(src, tos);
                         else
@@ -229,13 +228,14 @@ Tokenizer::tokenize_function(Source<Unicode> & src, Token_string & tos)
    Log(LOG_tokenize)   CERR << "tokenize_function(" << src << ")" << endl;
 
 const Unicode uni = src.get();
-Token tok = Avec::uni_to_token(uni);
+Token tok = Avec::uni_to_token(uni, LOC);
 
 #define sys(t, f) \
    case TOK_ ## t: tok = Token(tok.get_tag(), &Bif_ ## f::fun);   break;
 
    switch(tok.get_tag())
       {
+        sys(F0_ZILDE,      F0_ZILDE)
         sys(F1_EXECUTE,    F1_EXECUTE)
 
         sys(F2_AND,        F2_AND)
@@ -380,12 +380,7 @@ UCS_string string_value;
       }
    else
       {
-        Value_P val = new Value(string_value.size(), LOC);
-
-        loop(l, string_value.size())
-      new (&val->get_ravel(l)) CharCell(string_value[l]);
-
-   tos += Token(TOK_APL_VALUE1, val);
+        tos += Token(TOK_APL_VALUE1, new Value(string_value, LOC));
       }
 }
 //-----------------------------------------------------------------------------
@@ -398,8 +393,11 @@ Tokenizer::tokenize_string2(Source<Unicode> & src, Token_string & tos)
 {
    Log(LOG_tokenize)   CERR << "tokenize_string2(" << src << ")" << endl;
 
-const Unicode uni = src.get();
-   Assert(uni == UNI_ASCII_DOUBLE_QUOTE);
+   // skip the leading "
+   {
+     const Unicode uni = src.get();
+     Assert1(uni == UNI_ASCII_DOUBLE_QUOTE);
+   }
 
 UCS_string string_value;
 
@@ -407,18 +405,38 @@ UCS_string string_value;
        {
          const Unicode uni = src.get();
 
-         if (uni == UNI_ASCII_DOUBLE_QUOTE)
+         if (uni == UNI_ASCII_DOUBLE_QUOTE)     // terminating "
             {
               break;
             }
-         else if (uni == UNI_ASCII_CR)
+         else if (uni == UNI_ASCII_CR)          // ignore CR
             {
               continue;
             }
-         else if (uni == UNI_ASCII_LF)
+         else if (uni == UNI_ASCII_LF)          // end of line before "
             {
               rest_2 = src.rest();
               throw_parse_error(E_NO_STRING_END, LOC, loc);
+            }
+         else if (uni == UNI_ASCII_BACKSLASH)   // backslash
+            {
+              const Unicode uni1 = src.get();
+              switch(uni1)
+                 {
+                   case '0':  string_value += UNI_ASCII_NUL;            break;
+                   case 'a':  string_value += UNI_ASCII_BEL;            break;
+                   case 'b':  string_value += UNI_ASCII_BS;             break;
+                   case 't':  string_value += UNI_ASCII_HT;             break;
+                   case 'n':  string_value += UNI_ASCII_LF;             break;
+                   case 'v':  string_value += UNI_ASCII_VT;             break;
+                   case 'f':  string_value += UNI_ASCII_FF;             break;
+                   case 'r':  string_value += UNI_ASCII_CR;             break;
+                   case '[':  string_value += UNI_ASCII_ESC;            break;
+                   case '"':  string_value += UNI_ASCII_DOUBLE_QUOTE;   break;
+                   case '\\': string_value += UNI_ASCII_BACKSLASH;      break;
+                   default:   string_value += uni;
+                              string_value += uni1;
+                 }
             }
          else
             {
@@ -426,22 +444,13 @@ UCS_string string_value;
             }
        }
 
-   if (string_value.size() == 1)   // skalar
-      {
-        tos += Token(TOK_CHARACTER, string_value[0]);
-      }
-   else if (string_value.size() == 0)
+   if (string_value.size() == 0)
       {
         tos += Token(TOK_APL_VALUE1, &Value::Str0);
       }
    else
       {
-        Value_P val = new Value(string_value.size(), LOC);
-
-        loop(l, string_value.size())
-           new (&val->get_ravel(l)) CharCell(string_value[l]);
-
-        tos += Token(TOK_APL_VALUE1, val);
+        tos += Token(TOK_APL_VALUE1, new Value(string_value, LOC));
       }
 }
 //-----------------------------------------------------------------------------
@@ -470,7 +479,7 @@ bool real_floating = real_flt != real_int;
       {
         ++src;   // skip 'J'
 
-        APL_Float imag_flt;   // always valid
+        APL_Float   imag_flt;   // always valid
         APL_Integer imag_int;   // valid if real_floating is true
         const bool imag_valid =  tokenize_real(src, imag_flt, imag_int);
 
@@ -488,9 +497,9 @@ bool real_floating = real_flt != real_int;
       {
         ++src;   // skip 'D'
 
-        APL_Float angle;     // always valid
-        APL_Integer imag_int;   // valid if imag_floating is true
-        const bool imag_valid =  tokenize_real(src, angle, imag_int);
+        APL_Float   degrees_flt;  // always valid
+        APL_Integer degrees_int;  // valid if imag_floating is true
+        const bool imag_valid = tokenize_real(src, degrees_flt, degrees_int);
 
         if (!imag_valid)
            {
@@ -502,17 +511,17 @@ bool real_floating = real_flt != real_int;
 
         // real_flt is the magnitude and the angle is in degrees.
         //
-        APL_Float real = cos(M_PI*angle / 180);
-        APL_Float imag = sin(M_PI*angle / 180);
-        tos += Token(TOK_COMPLEX, real_flt*real, real_flt*real);
+        APL_Float real = cos(M_PI*degrees_flt / 180);
+        APL_Float imag = sin(M_PI*degrees_flt / 180);
+        tos += Token(TOK_COMPLEX, real_flt*real, real_flt*imag);
       }
    else if (src.rest() && *src == UNI_ASCII_R)
       {
         ++src;   // skip 'R'
 
-        APL_Float angle;     // always valid
-        APL_Integer imag_int;   // valid if imag_floating is true
-        const bool imag_valid =  tokenize_real(src, angle, imag_int);
+        APL_Float radian_flt;     // always valid
+        APL_Integer radian_int;   // valid if imag_floating is true
+        const bool imag_valid = tokenize_real(src, radian_flt, radian_int);
 
         if (!imag_valid)
            {
@@ -524,9 +533,9 @@ bool real_floating = real_flt != real_int;
 
         // real_flt is the magnitude and the angle is in radian.
         //
-        APL_Float real = cos(angle);
-        APL_Float imag = sin(angle);
-        tos += Token(TOK_COMPLEX, real_flt*real, real_flt*real);
+        APL_Float real = cos(radian_flt);
+        APL_Float imag = sin(radian_flt);
+        tos += Token(TOK_COMPLEX, real_flt*real, real_flt*imag);
       }
    else 
      {
