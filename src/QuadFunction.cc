@@ -62,7 +62,7 @@ Token
 Quad_AF::eval_B(Value_P B)
 {
 const ShapeItem ec = B->element_count();
-Value_P Z(new Value(B->get_shape(), LOC), LOC);
+Value_P Z(new Value(B->get_shape(), LOC));
 
    loop(v, ec)
        {
@@ -87,7 +87,8 @@ Value_P Z(new Value(B->get_shape(), LOC), LOC);
          DOMAIN_ERROR;
        }
 
-   return CHECK(Z, LOC);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //=============================================================================
 Token
@@ -109,7 +110,7 @@ const int mode_len = mode_vec[mode - 1];
 Shape shape_Z(rows);
    shape_Z.add_shape_item(mode_len);
 
-Value_P Z(new Value(shape_Z, LOC), LOC);
+Value_P Z(new Value(shape_Z, LOC));
 
    loop(r, rows)
       {
@@ -144,7 +145,7 @@ Value_P Z(new Value(shape_Z, LOC), LOC);
         // neither function nor variable (e.g. unused name)
         VALUE_ERROR;
 
-        if (symbol_name[0] == UNI_QUAD_QUAD)   // system function or variable
+        if (Avec::is_quad(symbol_name[0]))   // system function or variable
            {
              int l;
              const Token t(Workspace::get_quad(symbol_name, l));
@@ -166,13 +167,14 @@ Value_P Z(new Value(shape_Z, LOC), LOC);
            }
       }
 
-   return CHECK(Z, LOC);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //=============================================================================
 Token
 Quad_CR::eval_B(Value_P B)
 {
-UCS_string symbol_name(B.get_ref());
+UCS_string symbol_name(*B.get());
 
    // remove trailing whitespaces in B
    //
@@ -185,15 +187,14 @@ UCS_string symbol_name(B.get_ref());
     *  4) symbol_name is not displayable
     */
 NamedObject * obj = Workspace::lookup_existing_name(symbol_name);
-   if (obj == 0)   return CHECK((Value::Str0_0_P), LOC);
-
-   if (!obj->is_user_defined())   return CHECK((Value::Str0_0_P), LOC);
+   if (obj == 0)   return Token(TOK_APL_VALUE1, Value::Str0_0_P);
+   if (!obj->is_user_defined())   return Token(TOK_APL_VALUE1, Value::Str0_0_P);
 
 const Function * function = obj->get_function();
-   if (function == 0)   return CHECK((Value::Str0_0_P), LOC);
+   if (function == 0)   return Token(TOK_APL_VALUE1, Value::Str0_0_P);
 
    if (function->get_exec_properties()[0] != 0)
-      return CHECK((Value::Str0_0_P), LOC);
+      return Token(TOK_APL_VALUE1, Value::Str0_0_P);
 
    // show the function...
    //
@@ -210,7 +211,7 @@ Shape shape_Z;
    shape_Z.add_shape_item(tlines.size());
    shape_Z.add_shape_item(max_len);
    
-Value_P Z(new Value(shape_Z, LOC), LOC);
+Value_P Z(new Value(shape_Z, LOC));
 Cell * cZ = &Z->get_ravel(0);
    loop(row, tlines.size())
       {
@@ -219,7 +220,8 @@ Cell * cZ = &Z->get_ravel(0);
         loop(col, max_len - line.size())   new (cZ++) CharCell(UNI_ASCII_SPACE);
       }
 
-   return CHECK(Z, LOC);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //-----------------------------------------------------------------------------
 Token
@@ -229,12 +231,13 @@ Quad_CR::eval_AB(Value_P A, Value_P B)
    if (!A->is_skalar_or_len1_vector())       LENGTH_ERROR;
    if (!A->get_ravel(0).is_integer_cell())   DOMAIN_ERROR;
 
-Value_P Z = do_CR(A->get_ravel(0).get_int_value(), B);
-   return CHECK(Z, LOC);
+Value_P Z = do_CR(A->get_ravel(0).get_int_value(), *B.get());
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //-----------------------------------------------------------------------------
 Value_P
-Quad_CR::do_CR(APL_Integer a, Value_P B)
+Quad_CR::do_CR(APL_Integer a, const Value & B)
 {
 PrintStyle style;
 
@@ -247,9 +250,9 @@ PrintStyle style;
         case 4:
         case 8:
                { // like 3/7, but enclose B so that the entire B is boxed
-                   Value_P B1(new Value(LOC), LOC);
-                   new (&B1->get_ravel(0))   PointerCell(B->clone(LOC));
-                   Value_P result = do_CR(a - 1, B1);
+                   Value_P B1(new Value(LOC));
+                   new (&B1->get_ravel(0))   PointerCell(B.clone(LOC));
+                   Value_P result = do_CR(a - 1, *B1.get());
                    B1->erase(LOC);
                    return result;
                  }
@@ -264,14 +267,14 @@ PrintStyle style;
 
 const PrintContext pctx(style, Workspace::get_PP(),
                         Workspace::get_CT(), Workspace::get_PW());
-PrintBuffer pb(*B, pctx);
+PrintBuffer pb(B, pctx);
    Assert(pb.is_rectangular());
 
 const ShapeItem height = pb.get_height();
 const ShapeItem width = pb.get_width(0);
 
 const Shape sh(height, width);
-Value_P Z(new Value(sh, LOC), LOC);
+Value_P Z(new Value(sh, LOC));
 
    // prototype
    //
@@ -313,17 +316,18 @@ const APL_time end = start + 1000000 * B->get_ravel(0).get_real_value();
 
    // return time elapsed.
    //
-Value_P Z(new Value(LOC), LOC);
+Value_P Z(new Value(LOC));
    new (&Z->get_ravel(0)) FloatCell(0.000001*(now() - start));
 
-   return CHECK(Z, LOC);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //=============================================================================
 Token
 Quad_EA::eval_AB(Value_P A, Value_P B)
 {
 ExecuteList * fun = 0;
-const UCS_string statement_B(B.get_ref());
+const UCS_string statement_B(*B.get());
 
    try
       {
@@ -331,24 +335,27 @@ const UCS_string statement_B(B.get_ref());
       }
    catch (...)
       {
+      }
+
+   if (fun == 0)   // ExecuteList::fix() failed
+      {
         // syntax error in B: try to fix A...
         //
         try
            {
-             const UCS_string statement_A(A.get_ref());
+             const UCS_string statement_A(*A.get());
              fun = ExecuteList::fix(statement_A, LOC);
            }
        catch (...)
            {
-             // syntax error in A and B: give up.
-             //
-             SYNTAX_ERROR;
            }
+
+        if (fun == 0)   // syntax error in A and B: give up.
+        //
+        SYNTAX_ERROR;
 
         // A could be fixed: execute it.
         //
-        Assert(fun);
-
         Log(LOG_UserFunction__execute)   fun->print(CERR);
 
         Workspace::push_SI(fun, LOC);
@@ -360,8 +367,8 @@ const UCS_string statement_B(B.get_ref());
         StateIndicator * si = Workspace::SI_top();
 
         si->set_eoc_handler(eoc_A_done);
-        si->get_eoc_arg()._quad_EA().A = A;
-        si->get_eoc_arg()._quad_EA().B = B;
+        si->get_eoc_arg().A = A;
+        si->get_eoc_arg().B = B;
 
         return Token(TOK_SI_PUSHED);
       }
@@ -378,14 +385,14 @@ const UCS_string statement_B(B.get_ref());
    //
 StateIndicator * si = Workspace::SI_top();
    si->set_eoc_handler(eoc_B_done);
-   si->get_eoc_arg()._quad_EA().A = A;
-   si->get_eoc_arg()._quad_EA().B = B;
+   si->get_eoc_arg().A = A;
+   si->get_eoc_arg().B = B;
 
    return Token(TOK_SI_PUSHED);
 }
 //-----------------------------------------------------------------------------
 bool
-Quad_EA::eoc_B_done(Token & token, _EOC_arg & arg)
+Quad_EA::eoc_B_done(Token & token, EOC_arg & arg)
 {
 StateIndicator * si = Workspace::SI_top();
 
@@ -403,9 +410,9 @@ StateIndicator * si = Workspace::SI_top();
    //
    si->set_safe_execution(true);
 
-Value_P A = arg._quad_EA().A;
-Value_P B = arg._quad_EA().B;
-const UCS_string statement_A(A.get_ref());
+Value_P A = arg.A;
+Value_P B = arg.B;
+const UCS_string statement_A(*A.get());
 
    // ⍎A has failed. ⎕EM shows only B but should show A ⎕EA B instead.
    //
@@ -418,10 +425,11 @@ ExecuteList * fun = 0;
       }
    catch (...)
       {
-        // syntax error in A (and B has failed before): give up.
-        //
-        SYNTAX_ERROR;
       }
+        
+   // give up if if syntax error in A (and B has failed before)
+   //
+   if (fun == 0)   SYNTAX_ERROR;
 
    // A could be fixed: execute it.
    //
@@ -438,15 +446,15 @@ ExecuteList * fun = 0;
    {
      StateIndicator * si1 = Workspace::SI_top();
      si1->set_eoc_handler(eoc_A_done);
-     si1->get_eoc_arg()._quad_EA().A = A;
-     si1->get_eoc_arg()._quad_EA().B = B;
+     si1->get_eoc_arg().A = A;
+     si1->get_eoc_arg().B = B;
    }
 
    return true;
 }
 //-----------------------------------------------------------------------------
 bool
-Quad_EA::eoc_A_done(Token & token, _EOC_arg & arg)
+Quad_EA::eoc_A_done(Token & token, EOC_arg & arg)
 {
    // in A ⎕EA B, ⍎B has failed, and ⍎A was executed and may or
    // may not have failed.
@@ -458,9 +466,9 @@ Quad_EA::eoc_A_done(Token & token, _EOC_arg & arg)
         return false;   // ⍎B successful.
       }
 
-Value_P A = arg._quad_EA().A;
-Value_P B = arg._quad_EA().B;
-const UCS_string statement_A(A.get_ref());
+Value_P A = arg.A;
+Value_P B = arg.B;
+const UCS_string statement_A(*A.get());
 
    // here both ⍎B and ⍎A failed. ⎕EM shows only B, but should show
    // A ⎕EA B instead.
@@ -485,8 +493,8 @@ UCS_string ucs_2(6, UNI_ASCII_SPACE);
 int left_caret = 6;
 int right_caret;
 
-const UCS_string statement_A(A.get_ref());
-const UCS_string statement_B(B.get_ref());
+const UCS_string statement_A(*A.get());
+const UCS_string statement_B(*B.get());
 
    if (A_failed)
       {
@@ -523,7 +531,7 @@ StateIndicator * si = Workspace::SI_top();
 Token
 Quad_EC::eval_B(Value_P B)
 {
-const UCS_string statement_B(B.get_ref());
+const UCS_string statement_B(*B.get());
 
 ExecuteList * fun = 0;
 
@@ -533,11 +541,15 @@ ExecuteList * fun = 0;
       }
    catch (...)
       {
+      }
+
+   if (fun == 0)
+      {
         // syntax error in B
         //
-        Value_P Z(new Value(3, LOC), LOC);
-        Value_P Z1(new Value(2, LOC), LOC);
-        Value_P Z2(new Value(Error::error_name(E_SYNTAX_ERROR), LOC), LOC);
+        Value_P Z(new Value(3, LOC));
+        Value_P Z1(new Value(2, LOC));
+        Value_P Z2(new Value(Error::error_name(E_SYNTAX_ERROR), LOC));
         new (&Z1->get_ravel(0))   IntCell(Error::error_major(E_SYNTAX_ERROR));
         new (&Z1->get_ravel(1))   IntCell(Error::error_minor(E_SYNTAX_ERROR));
 
@@ -545,7 +557,8 @@ ExecuteList * fun = 0;
         new (&Z->get_ravel(1)) PointerCell(Z1);   // ⎕ET value
         new (&Z->get_ravel(2)) PointerCell(Z2);   // ⎕EM
 
-        return CHECK(Z, LOC);
+        Z->check_value(LOC);
+        return Token(TOK_APL_VALUE1, Z);
       }
 
    Assert(fun);
@@ -566,11 +579,11 @@ ExecuteList * fun = 0;
 
 //-----------------------------------------------------------------------------
 bool
-Quad_EC::eoc(Token & result_B, _EOC_arg &)
+Quad_EC::eoc(Token & result_B, EOC_arg &)
 {
    Workspace::SI_top()->set_safe_execution(false);
 
-Value_P Z(new Value(3, LOC), LOC);
+Value_P Z(new Value(3, LOC));
 Value_P Z2;
 
 int result_type = 0;
@@ -582,7 +595,7 @@ int et1 = 0;
        case TOK_ERROR:
             result_type = 0;
              Z2 = Value_P(new Value(Error::error_name(
-                            ErrorCode(result_B.get_int_val())), LOC), LOC);
+                            ErrorCode(result_B.get_int_val())), LOC));
              break;
 
         case TOK_APL_VALUE1:
@@ -603,7 +616,7 @@ int et1 = 0;
 
         case TOK_BRANCH:
              result_type = 4;
-             Z2 = Value_P(new Value(LOC), LOC);
+             Z2 = Value_P(new Value(LOC));
              new (&Z2->get_ravel(0))   IntCell(result_B.get_int_val());
              break;
 
@@ -617,7 +630,7 @@ int et1 = 0;
                  Assert(0);
       }
 
-Value_P Z1(new Value(2, LOC), LOC);
+Value_P Z1(new Value(2, LOC));
    new (&Z1->get_ravel(0)) IntCell(et0);
    new (&Z1->get_ravel(1)) IntCell(et1);
 
@@ -625,7 +638,8 @@ Value_P Z1(new Value(2, LOC), LOC);
    new (&Z->get_ravel(1)) PointerCell(Z1);
    new (&Z->get_ravel(2)) PointerCell(Z2);
 
-   move_2(result_B, CHECK(Z, LOC), LOC);
+   Z->check_value(LOC);
+   move_2(result_B, Token(TOK_APL_VALUE1, Z), LOC);
 
    return false;
 }
@@ -659,7 +673,7 @@ vector<const char *> evars;
        }
 
 const Shape sh_Z(evars.size(), 2);
-Value_P Z(new Value(sh_Z, LOC), LOC);
+Value_P Z(new Value(sh_Z, LOC));
 Cell * cZ = &Z->get_ravel(0);
 
    loop(e, evars.size())
@@ -673,25 +687,26 @@ Cell * cZ = &Z->get_ravel(0);
            }
         ++env;   // skip '='
 
-        Value_P varname(new Value(ucs, LOC), LOC);
+        Value_P varname(new Value(ucs, LOC));
 
         ucs.clear();
         while (*env)   ucs.append(Unicode(*env++));
 
-        Value_P varval(new Value(ucs, LOC), LOC);
+        Value_P varval(new Value(ucs, LOC));
 
         new (cZ++) PointerCell(varname);
         new (cZ++) PointerCell(varval);
       }
 
-   Z->set_default(Value::Spc_P);
-   return CHECK(Z, LOC);
+   Z->set_default(*Value::Spc_P);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //=============================================================================
 Token
 Quad_ES::eval_AB(Value_P A, Value_P B)
 {
-const UCS_string ucs(A.get_ref());
+const UCS_string ucs(*A.get());
 Error error(E_NO_ERROR, LOC);
 const Token ret = event_simulate(&ucs, B, error);
    if (error.error_code == E_NO_ERROR)   return ret;
@@ -725,7 +740,7 @@ Quad_ES::event_simulate(const UCS_string * A, Value_P B, Error & error)
 {
    // B is empty: no action
    //
-   if (B->element_count() == 0)   return CHECK(Value::Str0_0_P, LOC);
+   if (B->element_count() == 0)   return Token(TOK_APL_VALUE1, Value::Str0_0_P);
 
 const bool int_B = B->get_ravel(0).is_integer_cell();
    error.init(get_error_code(B), error.throw_loc);
@@ -733,7 +748,7 @@ const bool int_B = B->get_ravel(0).is_integer_cell();
    if (error.error_code == E_NO_ERROR)   // B = 0 0: reset ⎕ET and ⎕EM.
       {
         Workspace::clear_error(LOC);
-        return CHECK(Value::Str0_0_P, LOC);
+        return Token(TOK_APL_VALUE1, Value::Str0_0_P);
       }
 
    // at this point we shall throw the error. Add some error details.
@@ -743,7 +758,7 @@ const bool int_B = B->get_ravel(0).is_integer_cell();
    if (A)                                 // A ⎕ES B
       error.error_message_1 = *A;
    else if (error.error_code == E_USER_DEFINED_ERROR)   // ⎕ES with character B
-      error.error_message_1 = UCS_string(B.get_ref());
+      error.error_message_1 = UCS_string(*B.get());
    else if (error.is_known())             //  ⎕ES B with known major/minor B
       /* error_message_1 already OK */ ;
    else                                   //  ⎕ES B with unknown major/minor B
@@ -789,12 +804,13 @@ const ShapeItem var_count = B->get_rows();
 vector<UCS_string> vars(var_count);
    B->to_varnames(vars, false);
 
-Value_P Z(var_count > 1 ? new Value(var_count, LOC) : new Value(LOC), LOC);
+Value_P Z(var_count > 1 ? new Value(var_count, LOC) : new Value(LOC));
 Cell * cZ = &Z->get_ravel(0);
 
    loop(z, var_count)   new (cZ++) IntCell(expunge(vars[z]));
 
-   return CHECK(Z, LOC);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //-----------------------------------------------------------------------------
 int
@@ -923,9 +939,10 @@ int error_line = 0;
 UserFunction * fun = UserFunction::fix(text, error_line, false, LOC);
    if (fun == 0)
       {
-        Value_P Z(new Value(LOC), LOC);
+        Value_P Z(new Value(LOC));
         new (&Z->get_ravel(0))   IntCell(error_line + Workspace::get_IO());
-        return CHECK(Z, LOC);
+        Z->check_value(LOC);
+        return Token(TOK_APL_VALUE1, Z);
       }
 
    fun->set_exec_properties(exec_props);
@@ -934,16 +951,17 @@ Symbol * sym_fun = fun->get_sym_FUN();
    Assert(sym_fun);
 
 const UCS_string fun_name = sym_fun->get_name();
-Value_P Z(new Value(fun_name, LOC), LOC);
+Value_P Z(new Value(fun_name, LOC));
 
-   return CHECK(Z, LOC);
+        Z->check_value(LOC);
+        return Token(TOK_APL_VALUE1, Z);
 }
 //=============================================================================
 Token
 Quad_INP::eval_AB(Value_P A, Value_P B)
 {
-_EOC_arg _arg;
-quad_INP & arg = _arg._quad_INP();
+EOC_arg _arg;
+quad_INP & arg = _arg.u.u_quad_INP;
    arg.lines = 0;
 
    // B is the end of document marker for a 'HERE document', similar
@@ -994,8 +1012,8 @@ Token tok(TOK_FIRST_TIME);
 Token
 Quad_INP::eval_B(Value_P B)
 {
-_EOC_arg _arg;
-quad_INP & arg = _arg._quad_INP();
+EOC_arg _arg;
+quad_INP & arg = _arg.u.u_quad_INP;
    arg.lines = 0;
 
    // B is the end of document marker for a 'HERE document', similar
@@ -1016,7 +1034,7 @@ Token tok(TOK_FIRST_TIME);
 }
 //-----------------------------------------------------------------------------
 bool
-Quad_INP::eoc_INP(Token & token, _EOC_arg & _arg)
+Quad_INP::eoc_INP(Token & token, EOC_arg & _arg)
 {
    if (token.get_tag() == TOK_ERROR)
       {
@@ -1024,13 +1042,13 @@ Quad_INP::eoc_INP(Token & token, _EOC_arg & _arg)
          UCS_string err("*** ");
          err.append(Error::error_name((ErrorCode)(token.get_int_val())));
          err.append_utf8(" in ⎕INP ***");
-         Value_P val(new Value(err, LOC), LOC);
-         move_2(token, CHECK(val, LOC), LOC);
+         Value_P val(new Value(err, LOC));
+         move_2(token, Token(TOK_APL_VALUE1, val), LOC);
       }
 
    // _arg may be pop_SI()ed below so we need a copy of it
    //
-quad_INP arg = _arg._quad_INP();
+quad_INP arg = _arg.u.u_quad_INP;
 
    if (token.get_tag() != TOK_FIRST_TIME)
       {
@@ -1145,7 +1163,7 @@ quad_INP arg = _arg._quad_INP();
 
                    StateIndicator * si = Workspace::SI_top();
                    si->set_eoc_handler(eoc_INP);
-                   si->get_eoc_arg()._quad_INP() = arg;
+                   si->get_eoc_arg().u.u_quad_INP = arg;
                    return true;   // continue
                  }
             }
@@ -1156,15 +1174,15 @@ quad_INP arg = _arg._quad_INP();
        }
 
 const ShapeItem zlen = UCS_string_list::length(arg.lines);
-Value_P Z(new Value(ShapeItem(zlen), LOC), LOC);
+Value_P Z(new Value(ShapeItem(zlen), LOC));
 Cell * cZ = &Z->get_ravel(0) + zlen;
 
    loop(z, zlen)
       {
         UCS_string_list * node = arg.lines;
         arg.lines = arg.lines->prev;
-        Value_P ZZ(new Value(node->string, LOC), LOC);
-        CHECK_VAL(ZZ, LOC);
+        Value_P ZZ(new Value(node->string, LOC));
+        ZZ->check_value(LOC);
         new (--cZ)   PointerCell(ZZ);
         delete node;
       }
@@ -1173,8 +1191,9 @@ Cell * cZ = &Z->get_ravel(0) + zlen;
    delete arg.esc1;
    if (arg.esc2 != arg.esc1)   delete arg.esc2;
 
-   Z->set_default(Value::zStr0_P);
-   move_2(token, CHECK(Z, LOC), LOC);
+   Z->set_default(*Value::zStr0_P);
+   Z->check_value(LOC);
+   move_2(token, Token(TOK_APL_VALUE1, Z), LOC);
    return false;   // continue
 }
 //=============================================================================
@@ -1187,12 +1206,13 @@ const ShapeItem var_count = B->get_rows();
 vector<UCS_string> vars(var_count);
    B->to_varnames(vars, false);
 
-Value_P Z(var_count > 1 ? new Value(var_count, LOC) : new Value(LOC), LOC);
+Value_P Z(var_count > 1 ? new Value(var_count, LOC) : new Value(LOC));
 Cell * cZ = &Z->get_ravel(0);
 
    loop(v, var_count)   new (&Z->get_ravel(v))   IntCell(get_NC(vars[v]));
 
-   return CHECK(Z, LOC);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //-----------------------------------------------------------------------------
 APL_Integer
@@ -1200,7 +1220,7 @@ Quad_NC::get_NC(const UCS_string ucs)
 {
    if (ucs.size() == 0)   return -1;   // invalid name
 
-   if (ucs[0] == UNI_QUAD_QUAD)   // quad fun or var
+   if (Avec::is_quad(ucs[0]))   // quad fun or var
       {
         int len = 0;
         const Token t = Workspace::get_quad(ucs, len);
@@ -1286,7 +1306,7 @@ int longest = 0;
       }
 
 const Shape shZ(symbol_count, longest);
-Value_P Z(new Value(shZ, LOC), LOC);
+Value_P Z(new Value(shZ, LOC));
 Cell * cZ = &Z->get_ravel(0);
 
    // the number of symbols is small and ⎕NL is (or should) not be a perfomance
@@ -1316,7 +1336,8 @@ Cell * cZ = &Z->get_ravel(0);
         table[smallest] = table[--symbol_count];
       }
 
-   return CHECK(Z, LOC);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //=============================================================================
 Token
@@ -1358,15 +1379,15 @@ Value_P Z;
 const APL_Integer b = B->get_ravel(0).get_int_value();
    switch(b)
       {
-        case 1:  Z = Value_P(new Value(fun_name, LOC), LOC);             break;
-        case 2:  Z = Value_P(new Value(LOC), LOC);
+        case 1:  Z = Value_P(new Value(fun_name, LOC));             break;
+        case 2:  Z = Value_P(new Value(LOC));
                 new (&Z->get_ravel(0)) IntCell(fun_line);                break;
         case 3:  {
                    UCS_string fun_and_line(fun_name);
                    fun_and_line.append(UNI_ASCII_L_BRACK);
                    fun_and_line.append_number(fun_line);
                    fun_and_line.append(UNI_ASCII_R_BRACK);
-                   Z = Value_P(new Value(fun_and_line, LOC), LOC); 
+                   Z = Value_P(new Value(fun_and_line, LOC)); 
                  }
                  break;
 
@@ -1374,26 +1395,27 @@ const APL_Integer b = B->get_ravel(0).get_int_value();
                     {
                       const UCS_string & text =
                                         si->get_error().get_error_line_2();
-                      Z = Value_P(new Value(text, LOC), LOC);
+                      Z = Value_P(new Value(text, LOC));
                     }
                  else
                     {
                       const UCS_string text = exec->statement_text(PC);
-                      Z = Value_P(new Value(text, LOC), LOC);
+                      Z = Value_P(new Value(text, LOC));
                     }
                  break;
 
-        case 5: Z = Value_P(new Value(LOC), LOC);
+        case 5: Z = Value_P(new Value(LOC));
                 new (&Z->get_ravel(0)) IntCell(PC);                      break;
 
-        case 6: Z = Value_P(new Value(LOC), LOC);
+        case 6: Z = Value_P(new Value(LOC));
                 new (&Z->get_ravel(0)) IntCell(pm);                      break;
 
         default: DOMAIN_ERROR;
       }
 
-   Z->set_default(Value::Zero_P);
-   return CHECK(Z, LOC);
+   Z->set_default(*Value::Zero_P);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //-----------------------------------------------------------------------------
 Token
@@ -1413,7 +1435,7 @@ const ShapeItem len = Workspace::SI_entry_count();
 
    // at this point we should not fail...
    //
-Value_P Z(new Value(len, LOC), LOC);
+Value_P Z(new Value(len, LOC));
 
 ShapeItem z = 0;
    for (const StateIndicator * si = Workspace::SI_top();
@@ -1429,14 +1451,14 @@ ShapeItem z = 0;
 
          switch(b)
            {
-             case 1:  new (cZ) PointerCell(Value_P(new Value(fun_name, LOC), LOC));   break;
+             case 1:  new (cZ) PointerCell(Value_P(new Value(fun_name, LOC)));   break;
              case 2:  new (cZ) IntCell(fun_line);                       break;
              case 3:  {
                         UCS_string fun_and_line(fun_name);
                         fun_and_line.append(UNI_ASCII_L_BRACK);
                         fun_and_line.append_number(fun_line);
                         fun_and_line.append(UNI_ASCII_R_BRACK);
-                        new (cZ) PointerCell(Value_P(new Value(fun_and_line, LOC), LOC)); 
+                        new (cZ) PointerCell(Value_P(new Value(fun_and_line, LOC))); 
                       }
                       break;
 
@@ -1444,12 +1466,12 @@ ShapeItem z = 0;
                          {
                            const UCS_string & text =
                                         si->get_error().get_error_line_2();
-                           new (cZ) PointerCell(Value_P(new Value(text, LOC), LOC)); 
+                           new (cZ) PointerCell(Value_P(new Value(text, LOC))); 
                          }
                       else
                          {
                            const UCS_string text = exec->statement_text(PC);
-                           new (cZ) PointerCell(Value_P(new Value(text, LOC), LOC)); 
+                           new (cZ) PointerCell(Value_P(new Value(text, LOC))); 
                          }
                       break;
 
@@ -1459,15 +1481,16 @@ ShapeItem z = 0;
 
        }
 
-   Z->set_default(Value::Zero_P);
-   return CHECK(Z, LOC);
+   Z->set_default(*Value::Zero_P);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //=============================================================================
 Token
 Quad_UCS::eval_B(Value_P B)
 {
 const ShapeItem ec = B->element_count();
-Value_P Z(new Value(B->get_shape(), LOC), LOC);
+Value_P Z(new Value(B->get_shape(), LOC));
 
    loop(v, ec)
        {
@@ -1491,7 +1514,8 @@ Value_P Z(new Value(B->get_shape(), LOC), LOC);
          DOMAIN_ERROR;
        }
 
-   return CHECK(Z, LOC);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //=============================================================================
 

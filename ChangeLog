@@ -40,4 +40,10 @@
  4715 fixed [] binding in Parser.cc"
  4716 --rawCIN command line option added
  4735 fixed ⌹ dimension problem, send CIN to cerr
-
+ 4800 added alternate APL characters from Bob Smith
+ 4802 fixed wrong closing flag for <SI-entry> in workspace XML file
+ 4810 UERR channel added
+ 4818 use kill() rather than /proc to check if process is alive
+ 4822 fixed 2⊤1 problem
+ 4898 shared_ptr<Value> working (not yet enabled by default)
+ 4905 LAST VERSION WITH OLD MEMORY MANAGEMENT

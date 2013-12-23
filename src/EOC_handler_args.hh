@@ -28,11 +28,7 @@
 /// arguments of the EOC handler for ⎕EA
 struct quad_EA
 {
-   /// the left arg to ⎕EA
-  Value_P A;
-
-   /// the right arg to ⎕EA
-  Value_P B;
+  // the EOC handler for ⎕EC has no additional arguments
 };
 
 /// arguments of the EOC handler for ⎕EC
@@ -56,19 +52,10 @@ struct quad_INP
 /// arguments of the EOC handler for A ∘.f B
 struct OUTER_PROD
 {
-  Value_P Z;         ///< final operator result
-  Value_P A;         ///< operator left arg
-  bool unlock_A;     ///< true if A->clear_eoc() needed
   Function * RO;     ///< user defined function
-  Value_P B;         ///< operator right arg
-  bool unlock_B;     ///< true if B->clear_eoc() needed
   Cell * cZ;         ///< current result
-  Value_P value_A;   ///< current left arg
-  Value_P RO_A;      ///< current left arg for RO
   ShapeItem a;       ///< current A index
   ShapeItem len_A;   ///< number of cells in left arg
-  Value_P value_B;   ///< current right arg
-  Value_P RO_B;      ///< current right arg for RO
   ShapeItem b;       ///< current B index
   ShapeItem len_B;   ///< number of cells in right arg
   const Cell * cA;   ///< current left arg
@@ -79,37 +66,31 @@ struct OUTER_PROD
 /// arguments of the EOC handler for A g.f B
 struct INNER_PROD
 {
-  Value_P Z;           ///< final operator result
-  Value_P A;           ///< operator left arg
-  bool unlock_A;       ///< true if A->clear_eoc() needed
-  Value_P B;           ///< operator right arg
-  bool unlock_B;       ///< true if B->clear_eoc() needed
   Cell * cZ;           ///< current result
-  Value * * args_A;    ///< left args of RO
+  Value_P * args_A;    ///< left args of RO
   ShapeItem a;         ///< current A1 index
   ShapeItem items_A;   ///< number of cells in A1
   Function * LO;       ///< left user defined function
   Function * RO;       ///< right user defined function
-  Value * * args_B;    ///< right args of RO
+  Value_P * args_B;    ///< right args of RO
   ShapeItem b;         ///< current B1 index
   ShapeItem items_B;   ///< number of cells in B1
   ShapeItem v1;        ///< current LO index
-  Value_P V1;          ///< vector being LO-reduced
-  Value_P LO_B;        ///< current right arg of LO
   int how;             ///< how to continue in finish_inner_product()
   bool last_ufun;      ///< true for the last user defined function call
 };
 
 /// arguments of the EOC handler for one f/B result cell
-struct reduce_beam
+struct REDUCTION
 {
-   /// initialize \b this reduce_beam
-   void init(Value_P Z,  const Shape3 & Z3, Function * LO,
-             Value_P B, ShapeItem bm, ShapeItem A0, int A0_inc)
+   /// initialize \b this REDUCTION object
+   void init(Cell * cZ,  const Shape3 & Z3, Function * LO,
+             const Cell * cB, ShapeItem bm, ShapeItem A0, int A0_inc)
       {
         need_pop = false;
-        frame.init(Z, Z3, B, bm, A0_inc);
-        beam.init(LO, &B->get_ravel(0), Z3.l(), A0);
+        
+        frame.frame_init(cZ, Z3, cB, bm, A0_inc);
+        beam.beam_init(LO, cB, Z3.l(), A0);
       }
 
    /// true if SI was pushed
@@ -119,7 +100,7 @@ struct reduce_beam
    struct _beam
       {
          /// initialize \b this _beam (first beam in frame)
-         void init(Function * _LO, const Cell * B_h0l,
+         void beam_init(Function * _LO, const Cell * B_h0l,
                    ShapeItem _dist, ShapeItem _A0)
             { LO = _LO;
               if (_A0 < 0)   { dist = _dist;     length = - _A0; }
@@ -156,29 +137,28 @@ struct reduce_beam
    struct _frame
       {
         /// initialize \b this _frame
-        void init(Value_P _Z, const Shape3 & Z3,
-                  Value_P _vB, ShapeItem _max_bm, int _A0_inc)
+        void frame_init(Cell * _cZ, const Shape3 & Z3,
+                  const Cell *  _cB, ShapeItem _max_bm, int _A0_inc)
            {
-             Z = _Z;
-             B = _vB;
+             cB = _cB;
+             cZ = _cZ;
+
              max_h = Z3.h();
              max_bm = _max_bm;
              max_zm = Z3.m();
              max_l = Z3.l();
              A0_inc = _A0_inc;
 
-             cZ = &Z->get_ravel(0);
              h = 0;
              m = 0;
              l = 0;
            }
 
         /// advance Z in \b this frame
-        Cell * next_Z()
+       void next_hml()
            { ++l;
              if (l >= max_l)    { l = 0;   ++m; }
              if (m >= max_zm)   { m = 0;   ++h; }
-             return cZ++;
            }
 
         /// return true iff this frame is finished (the last reduction result
@@ -188,11 +168,9 @@ struct reduce_beam
 
         /// the beam start for Z[h;m]
         const Cell * beam_start()
-           { return &B->get_ravel(l + max_l*(m * (1 - A0_inc) + max_bm * h)); } 
+           { return cB + l + max_l*(m * (1 - A0_inc) + max_bm * h); } 
 
         // fixed variables
-        Value_P Z;                 ///< final result
-        Value_P B;                 ///< right operator argument
         ShapeItem    max_bm;       ///< max. m for B
         ShapeItem    max_h;        ///< max. h
         ShapeItem    max_zm;       ///< max. m for Z
@@ -200,6 +178,7 @@ struct reduce_beam
         int          A0_inc;       ///< window increment (= 1 for scan)
 
         // running variables
+        const Cell * cB;           ///< first ravel item in B
         Cell * cZ;                 ///< beam result
         ShapeItem    h;            ///< current h
         ShapeItem    m;            ///< current m
@@ -210,18 +189,15 @@ struct reduce_beam
 /// arguments of the EOC handler for A f¨ B
 struct EACH_ALB
 {
-  Value_P A;         ///< operator left argument
   const Cell * cA;   ///< current left arg
   uint32_t dA;       ///< cA increment (0 or 1)
   Function * LO;     ///< user defined function
-  Value_P B;         ///< operator right argument
   const Cell * cB;   ///< current left arg
   uint32_t dB;       ///< cB increment (0 or 1)
   Cell * cZ;         ///< current result cell
   ShapeItem z;       ///< current result index
   ShapeItem count;   ///< number of iterations
   bool sub;          ///< create a PointerCell
-  Value_P Z;         ///< final operator result
   int how;           ///< how to continue in finish_eval_LB()
 };
 
@@ -229,9 +205,7 @@ struct EACH_ALB
 struct EACH_LB
 {
   Function * LO;     ///< user defined function
-  Value_P B;   ///< operator right argument
   const Cell * cB;   ///< current left arg
-  Value_P Z;         ///< final operator result
   Cell * cZ;         ///< current result cell
   ShapeItem z;       ///< current result index
   ShapeItem count;   ///< number of iterations
@@ -248,7 +222,7 @@ struct RANK_LXB
   char _sh_B_high[ sizeof(Shape) ];      ///< high dimensions of B
   ShapeItem ec_B_low;                    ///< items in _sh_B_low
   const Cell * cB;                       ///< current B cell
-  Value * * ZZ ;                         ///< current ZZ value
+  Value_P * ZZ ;                         ///< current ZZ value
   char _sh_Z_max_low[ sizeof(Shape) ];   ///< max. low dimensions of Z
   ShapeItem ec_high;                     ///< max. high index
   int how;                               ///< how to finish_eval_LXB()
@@ -268,19 +242,17 @@ struct RANK_ALXB
 {
   Function * LO;                         ///< user defined function
   ShapeItem h;                           ///< current high index
-  Value_P A;                             ///< left operator argument
   bool repeat_A;                         ///< skalar-extend A
   char _sh_A_low [ sizeof(Shape) ];      ///< low dimensions of A
   ShapeItem ec_A_low;                    ///< items in _sh_B_low
   const Cell * cA;                       ///< current A cell
-  Value_P B;                             ///< left operator argument
   bool repeat_B;                         ///< skalar-extend B
   char _sh_B_low [ sizeof(Shape) ];      ///< low dimensions of B
   char _sh_B_high[ sizeof(Shape) ];      ///< high dimensions of B
   ShapeItem ec_B_low;                    ///< items in _sh_B_low
   const Cell * cB;                       ///< current B cell
-  Value * * ZZ ;                         ///< current ZZ value
-  char _sh_Z_max_low[ sizeof(Shape) ];   ///< max. low dimensions of Z
+  Value_P * ZZ;                          ///< current ZZ value
+  char _sh_Z_max_low[sizeof(Shape)];     ///< max. low dimensions of Z
   ShapeItem ec_high;                     ///< max. high index
   int how;                               ///< how to finish_eval_LXB()
 
@@ -298,29 +270,119 @@ struct RANK_ALXB
 };
 
 /// the second argument for an EOC_HANDLER. The actual type depends on the
-/// handler. An _EOC_arg contains all information that is neccessary for
+/// handler. An EOC_arg contains all information that is neccessary for
 /// the EOC handler to compute the result token.
-union _EOC_arg
+struct EOC_arg
 {
-#define U_TIEM(x)                   \
-   /** space for one x **/  char ea_ ## x [ sizeof(x) ];    \
-   /** return an x **/      x & _ ## x()  { return *(x*) & ea_ ## x; }
+   void set_EOC()
+      {
+        Value * v;
+        if (v = A   .get())   v->set_eoc();
+        if (v = B   .get())   v->set_eoc();
+        if (v = Z   .get())   v->set_eoc();
+        if (v = V1  .get())   v->set_eoc();
+        if (v = V2  .get())   v->set_eoc();
+        if (v = RO_A.get())   v->set_eoc();
+        if (v = RO_B.get())   v->set_eoc();
+      }
 
-   U_TIEM(quad_EA)
-   U_TIEM(quad_EC)
-   U_TIEM(quad_INP)
-   U_TIEM(OUTER_PROD)
-   U_TIEM(INNER_PROD)
-   U_TIEM(reduce_beam)
-   U_TIEM(EACH_ALB)
-   U_TIEM(EACH_LB)
-   U_TIEM(RANK_LXB)
-   U_TIEM(RANK_ALXB)
+   void clear_EOC(const char * loc)
+      {
+        Value * vA    = A   .get();
+        Value * vB    = B   .get();
+        Value * vZ    = Z   .get();
+        Value * vV1   = V1  .get();
+        Value * vV2   = V2  .get();
+        Value * vRO_A = RO_A.get();
+        Value * vRO_B = RO_B.get();
+
+        // erase all pointers, but only once! We start with the least
+        // frequently used ones to keep this short.
+        //
+        if (vRO_A)   { vRO_A ->clear_eoc();
+                       vRO_A ->erase(LOC);
+                       if (vRO_A == vA)      vA  = 0;
+                       if (vRO_A == vB)      vB  = 0;
+                       if (vRO_A == vV1)     vV1 = 0;
+                       if (vRO_A == vV2)     vV2 = 0;
+                       if (vRO_A == vRO_B)   vRO_B = 0;
+                     }
+
+        if (vRO_B)   { vRO_B ->clear_eoc();
+                       vRO_B ->erase(LOC);
+                       if (vRO_B == vA)      vA  = 0;
+                       if (vRO_B == vB)      vB  = 0;
+                       if (vRO_B == vV1)     vV1 = 0;
+                       if (vRO_B == vV2)     vV2 = 0;
+                     }
+
+        if (vV1)     { vV1 ->clear_eoc();
+                       vV1 ->erase(LOC);
+                       if (vV1 == vA)      vA  = 0;
+                       if (vV1 == vB)      vB  = 0;
+                       if (vV1 == vV2)     vV2 = 0;
+                     }
+
+        if (vV2)     { vV2 ->clear_eoc();
+                       vV2 ->erase(LOC);
+                       if (vV2 == vA)      vA  = 0;
+                       if (vV2 == vB)      vB  = 0;
+                     }
+
+        if (vA)      { vA ->clear_eoc();
+                       vA ->erase(LOC);
+                       if (vA == vB)       vB  = 0;
+                     }
+
+        if (vB)      { vB ->clear_eoc();
+                       vB ->erase(LOC);
+                     }
+
+        if (vZ)      vZ ->clear_eoc();
+      }
+
+   /// right argument
+  Value_P A;
+
+   /// left argument
+  Value_P B;
+
+   /// result
+  Value_P Z;
+
+  /// INNER_PROD: argument for LO-reduction
+  /// OUTER_PROD: helper value for non-pointer left RO argument
+  Value_P V1;
+
+  /// INNER_PROD: accumulator for LO-reduction
+  /// OUTER_PROD: helper value for non-pointer right RO argument
+  Value_P V2;
+
+  /// OUTER_PROD: left RO argument
+  Value_P RO_A;
+
+   /// OUTER_PROD: right RO argument
+  Value_P RO_B;
+
+   /// additional EOC handler specific arguments
+   union EOC_arg_u
+      {
+        quad_EA    u_quad_EA;
+        quad_EC    u_quad_EC;
+        quad_INP   u_quad_INP;
+        OUTER_PROD u_OUTER_PROD;
+        INNER_PROD u_INNER_PROD;
+        REDUCTION  u_REDUCTION;
+        EACH_ALB   u_EACH_ALB;
+        EACH_LB    u_EACH_LB;
+        RANK_LXB   u_RANK_LXB;
+        RANK_ALXB  u_RANK_ALXB;
+      } u;
 };
 
 /// the type of a function to be called at the end of a context.
 /// the function returns true to retry and false to continue with token.
-typedef bool (*EOC_HANDLER)(Token & token, _EOC_arg & arg);
+typedef bool (*EOC_HANDLER)(Token & token, EOC_arg & arg);
 
 //-----------------------------------------------------------------------------
 

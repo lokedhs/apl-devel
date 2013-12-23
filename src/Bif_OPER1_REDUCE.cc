@@ -72,7 +72,7 @@ vector<ShapeItem> rep_counts;
 Shape shape_Z(shape_B);
    shape_Z.set_shape_item(axis, len_Z);
 
-Value_P Z(new Value(shape_Z, LOC), LOC);
+Value_P Z(new Value(shape_Z, LOC));
 Cell * cZ = &Z->get_ravel(0);
 
 const Shape3 shape_B3(shape_B, axis);
@@ -106,8 +106,9 @@ const Shape3 shape_B3(shape_B, axis);
            }
       }
 
-   Z->set_default(B);
-   return CHECK(Z, LOC);
+   Z->set_default(*B.get());
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //-----------------------------------------------------------------------------
 Token
@@ -168,7 +169,7 @@ const int n_wise = A0 < 0 ? -A0 : A0;   // the number of items
       {
         Shape shape_B1 = B->get_shape().insert_axis(axis, 0);
         shape_B1.increment_shape_item(axis + 1);
-        Value_P val(new Value(shape_B1, LOC), LOC);
+        Value_P val(new Value(shape_B1, LOC));
         val->set_arg();
         val->get_ravel(0).init(B->get_ravel(0));   // prototype
 
@@ -187,9 +188,10 @@ const int n_wise = A0 < 0 ? -A0 : A0;   // the number of items
         //
         Shape shape_Z = B->get_shape();
         shape_Z.set_shape_item(axis, 0);
-        Value_P Z(new Value(shape_Z, LOC), LOC);
+        Value_P Z(new Value(shape_Z, LOC));
         Z->get_ravel(0).init(B->get_ravel(0));
-        return CHECK(Z, LOC);
+        Z->check_value(LOC);
+        return Token(TOK_APL_VALUE1, Z);
       }
 
 Shape shape_Z(B->get_shape());
@@ -207,28 +209,32 @@ Bif_REDUCE::do_reduce(const Shape & shape_Z, const Shape3 & Z3, ShapeItem a,
 {
    if (shape_Z.is_empty())   return LO->eval_identity_fun(B, axis);
 
-_EOC_arg arg;
-Value_P Z(new Value(shape_Z, LOC), LOC);
-   Z->set_eoc();   // keep Z
-   arg._reduce_beam().init(Z, Z3, LO, B, bm, a, 0);
+EOC_arg arg;
+REDUCTION & _arg = arg.u.u_REDUCTION;
+
+   new (& arg.Z)   Value_P(new Value(shape_Z, LOC));
+   arg.B = B;
+   _arg.init(&arg.Z->get_ravel(0), Z3, LO, &B->get_ravel(0), bm, a, 0);
+
+   arg.set_EOC();
 
 Token tok(TOK_FIRST_TIME);
-   B->set_eoc();   // keep B
    eoc_beam(tok, arg);
    return tok;
 }
 //-----------------------------------------------------------------------------
 bool
-Bif_REDUCE::eoc_beam(Token & token, _EOC_arg & _arg)
+Bif_REDUCE::eoc_beam(Token & token, EOC_arg & si_arg)
 {
    if (token.get_tag() == TOK_ERROR)   return false;   // stop it
 
-reduce_beam arg = _arg._reduce_beam();
+EOC_arg arg = si_arg;
+REDUCTION & _arg = arg.u.u_REDUCTION;
 
    if (token.get_tag() == TOK_FIRST_TIME)   // first call to eoc_beam()
       {
 new_beam:
-        const Cell * cB = arg.beam.next_B();
+        const Cell * cB = _arg.beam.next_B();
 
         // we need a token with a free (erasable) value. If the value were
         // nested, then we would get a double delete (from the original owner
@@ -246,9 +252,10 @@ new_beam:
 again:
 Value_P BB = token.get_apl_val();
 
-   if (arg.beam.done())   // last reduction in current beam
+   if (_arg.beam.done())   // last reduction in current beam
       {
-        Cell * dst = arg.frame.next_Z();
+        _arg.frame.next_hml();
+        Cell * dst = _arg.frame.cZ++;
 
         // if beam has only one element, as for the first column in scan,
         // then BB->clear_eoc() below is never reached and we have to do
@@ -257,31 +264,29 @@ Value_P BB = token.get_apl_val();
         BB->clear_arg();
         dst->init_from_value(BB, LOC);
 
-        if (arg.frame.done())   // if last beam (final result complete)
+        if (_arg.frame.done())   // if last beam (final result complete)
            {
-             arg.frame.B->clear_eoc();   // release B
-             arg.frame.B->erase(LOC);
-
-             arg.frame.Z->clear_eoc();   // release B
-             copy_1(token, CHECK(arg.frame.Z, LOC), LOC);
+             arg.clear_EOC(LOC);
+             arg.Z->check_value(LOC);
+             copy_1(token, Token(TOK_APL_VALUE1, arg.Z), LOC);
              return false;   // stop it
            }
 
-        if (arg.frame.A0_inc)   arg.beam.length = arg.frame.m + 1;
-        const Cell * beam = arg.frame.beam_start();
-        arg.beam.reset(beam);
+        if (_arg.frame.A0_inc)   _arg.beam.length = _arg.frame.m + 1;
+        const Cell * beam = _arg.frame.beam_start();
+        _arg.beam.reset(beam);
         goto new_beam;
       }
 
    // pop context for previous eval_AB() call
    //
-   if (arg.need_pop)   Workspace::pop_SI(LOC);
+   if (_arg.need_pop)   Workspace::pop_SI(LOC);
 
-const Cell * cA = arg.beam.next_B();
+const Cell * cA = _arg.beam.next_B();
 Value_P AA = cA->to_value(LOC);   // does set_arg()
    AA->set_eoc();
    BB->set_eoc();
-   copy_1(token, arg.beam.LO->eval_AB(AA, BB), LOC);
+   copy_1(token, _arg.beam.LO->eval_AB(AA, BB), LOC);
    AA->clear_arg();
    AA->clear_eoc();
    AA->erase(LOC);
@@ -302,10 +307,10 @@ Value_P AA = cA->to_value(LOC);   // does set_arg()
    // Otherwise LO must have been a user defined function
    //
    Assert(token.get_tag() == TOK_SI_PUSHED);
-   arg.need_pop = true;
+   _arg.need_pop = true;
 
    Workspace::SI_top()->set_eoc_handler(eoc_beam);
-   Workspace::SI_top()->get_eoc_arg()._reduce_beam() = arg;
+   Workspace::SI_top()->get_eoc_arg() = arg;
    return true;   // continue
 }
 //-----------------------------------------------------------------------------

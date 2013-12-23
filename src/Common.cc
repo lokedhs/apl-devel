@@ -27,6 +27,7 @@
 
 #include "Common.hh"
 #include "Output.hh"
+#include "Value.hh"
 
 uint64_t total_memory = 0;
 
@@ -99,7 +100,6 @@ operator << (ostream & out, const Function_PC2 & ft)
    return out << ft.low << ":" << ft.high;
 }
 //-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
 ostream &
 print_flags (ostream & out, ValueFlags flags)
 {
@@ -117,3 +117,4 @@ print_flags (ostream & out, ValueFlags flags)
               << ((flags & VF_shared)   ?  "∇" : "-");
 }
 //-----------------------------------------------------------------------------
+

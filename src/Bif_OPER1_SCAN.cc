@@ -59,16 +59,16 @@ vector<ShapeItem> rep_counts;
 
 Shape shape_Z(shape_B);
    shape_Z.set_shape_item(axis, ec_A);
-Value_P Z(new Value(shape_Z, LOC), LOC);
+Value_P Z(new Value(shape_Z, LOC));
 
    if (ec_A == 0)   // (⍳0)/B : 
       {
         if (shape_B.get_shape_item(axis) > 1)   LENGTH_ERROR;
 
-        Z->set_default(B);
-        return CHECK(Z, LOC);
+        Z->set_default(*B.get());
+        Z->check_value(LOC);
+        return Token(TOK_APL_VALUE1, Z);
       }
-
 
 const Shape3 shape_Z3(shape_Z, axis);
 
@@ -113,9 +113,10 @@ ShapeItem inc_2 = 0;              // increment after result m*l items
         cB += inc_2;
       }
 
-   Z->set_default(B);
+   Z->set_default(*B.get());
 
-   return CHECK(Z, LOC);
+   Z->check_value(LOC);
+   return Token(TOK_APL_VALUE1, Z);
 }
 //-----------------------------------------------------------------------------
 Token
@@ -140,10 +141,15 @@ const ShapeItem m_len = B->get_shape_item(axis);
       }
 
 const Shape3 Z3(B->get_shape(), axis);
-_EOC_arg arg;
-Value_P Z(new Value(B->get_shape(), LOC), LOC);
+EOC_arg arg;
+REDUCTION & _arg = arg.u.u_REDUCTION;
+
+Value_P Z(new Value(B->get_shape(), LOC));
    Z->set_eoc();   // keep Z
-   arg._reduce_beam().init(Z, Z3, LO, B, m_len, 1, 1);
+   arg.B = B;
+   arg.Z = Z;
+   _arg.init(&Z->get_ravel(0), Z3, LO, &B->get_ravel(0), m_len, 1, 1);
+   arg.set_EOC();
 
 Token tok(TOK_FIRST_TIME);
    B->set_eoc();   // keep B

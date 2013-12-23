@@ -881,7 +881,7 @@ int idx = get_nrs(var_name, shape);
    if (objects.size() && !var_name.contained_in(objects))   return;
 
 Symbol * sym = 0;
-   if (var_name[0] == UNI_QUAD_QUAD)   // system variable.
+   if (Avec::is_quad(var_name[0]))   // system variable.
       {
         int len = 0;
         const Token t = Workspace::get_quad(var_name, len);
@@ -910,7 +910,7 @@ Token_string tos;
  
    if (tos.size() != shape.element_count())   return;
 
-Value_P val(new Value(shape, LOC), LOC);
+Value_P val(new Value(shape, LOC));
    new (&val->get_ravel(0)) IntCell(0);   // prototype
 
 const ShapeItem ec = val->element_count();
@@ -940,7 +940,7 @@ int idx = get_nrs(var_name, shape);
    if (objects.size() && !var_name.contained_in(objects))   return;
 
 Symbol * sym = 0;
-   if (var_name[0] == UNI_QUAD_QUAD)   // system variable.
+   if (Avec::is_quad(var_name[0]))   // system variable.
       {
         int len = 0;
         const Token t = Workspace::get_quad(var_name, len);
@@ -960,7 +960,7 @@ Symbol * sym = 0;
         CERR << "'" << endl;
       }
 
-Value_P val(new Value(shape, LOC), LOC);
+Value_P val(new Value(shape, LOC));
    new (&val->get_ravel(0)) CharCell(UNI_ASCII_SPACE);   // prototype
 
 const ShapeItem ec = val->element_count();

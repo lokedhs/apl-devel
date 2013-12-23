@@ -132,7 +132,7 @@ Workspace::immediate_execution(bool exit_on_error)
                  {
                    if (err.error_code != E_DEFN_ERROR)
                       {
-                        err.print_em(CERR, LOC);
+                        err.print_em(UERR, LOC);
                         CERR << __FUNCTION__ << "() caught APL error "
                              << HEX(err.error_code) << " ("
                              << err.error_name(err.error_code) << ")" << endl;
@@ -157,7 +157,7 @@ Workspace::immediate_execution(bool exit_on_error)
 NamedObject *
 Workspace::lookup_existing_name(const UCS_string & name)
 {
-   if (name[0] == UNI_QUAD_QUAD)   // distinguished name
+   if (Avec::is_quad(name[0]))   // distinguished name
       {
         int len;
         Token tok = get_quad(name, len);
@@ -181,7 +181,7 @@ Workspace::lookup_existing_symbol(const UCS_string & symbol_name)
 {
    if (symbol_name.size() == 0)   return 0;
 
-   if (symbol_name[0] == UNI_QUAD_QUAD)   // distinguished name
+   if (Avec::is_quad(symbol_name[0]))   // distinguished name
       {
         int len;
         Token tok = get_quad(symbol_name, len);
@@ -197,7 +197,7 @@ Workspace::lookup_existing_symbol(const UCS_string & symbol_name)
 Token
 Workspace::get_quad(UCS_string ucs, int & len)
 {
-   if (ucs.size() == 0 || ucs[0] != UNI_QUAD_QUAD)
+   if (ucs.size() == 0 || !Avec::is_quad(ucs[0]))
      {
        len = 0;
        return Token();
@@ -444,7 +444,7 @@ Workspace::unmark_all_values()
 }
 //-----------------------------------------------------------------------------
 int
-Workspace::show_owners(ostream & out, Value_P value)
+Workspace::show_owners(ostream & out, const Value & value)
 {
 int count = 0;
 

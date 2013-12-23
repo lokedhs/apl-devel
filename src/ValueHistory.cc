@@ -28,6 +28,7 @@
 #include "PrintOperator.hh"
 #include "TestFiles.hh"
 #include "UCS_string.hh"
+#include "Value.hh"
 #include "ValueHistory.hh"
 
 VH_entry VH_entry::history[VALUEHISTORY_SIZE];
@@ -54,6 +55,12 @@ VH_entry::init()
 void
 add_event(const Value * val, VH_event ev, int ia, const char * loc)
 {
+   if (loc == 0)
+      {
+        if (val)   loc = val->where_allocated();
+        else       loc = LOC;
+      }
+
 VH_entry * entry = VH_entry::history + VH_entry::idx++;
    if (VH_entry::idx >= VALUEHISTORY_SIZE)   VH_entry::idx = 0;
 
@@ -61,19 +68,19 @@ VH_entry * entry = VH_entry::history + VH_entry::idx++;
 }
 //----------------------------------------------------------------------------
 void
-VH_entry::print_history(ostream & out, const Value * val)
+print_history(ostream & out, const Value * val, const char * loc)
 {
    // search backwards for events of val.
    //
 vector<const VH_entry *> var_events;
-int cidx = idx;
+int cidx = VH_entry::idx;
 
    loop(e, VALUEHISTORY_SIZE)
        {
          --cidx;
          if (cidx < 0)   cidx = VALUEHISTORY_SIZE - 1;
 
-         const VH_entry * entry = history + cidx;
+         const VH_entry * entry = VH_entry::history + cidx;
          
          if (entry->event == VHE_None)     break;      // end of history
 
@@ -92,9 +99,18 @@ int cidx = idx;
           if (entry->event == VHE_Create)   break;   // create event found
        }
 
-   out << endl << "value " << (const void *)val
-       << " has " << var_events.size()
-       << " events in its history:" << endl;
+   if (VALUEHISTORY_SIZE == 0)
+      {
+        out << "value history disabled" << endl;
+      }
+    else
+      {
+        out << endl << "value " << (const void *)val
+            << " has " << var_events.size()
+            << " events in its history";
+        if (loc)   out << " (at " << loc << ")";
+        out << ":" << endl;
+      }
 
 int flags = 0;
 const VH_entry * previous = 0;
@@ -135,22 +151,24 @@ VH_entry::print(int & flags, ostream & out, const Value * val,
 const ValueFlags flags_before = (ValueFlags)flags;
 
    if (previous == 0                            ||
+       previous->testcase_file == 0             ||
        previous->testcase_line != testcase_line ||
        strcmp(previous->testcase_file, testcase_file))
-          {
-            if (testcase_file)   out << "  FILE:        " << testcase_file
-                                     << ":" << testcase_line << endl;
-          }
+      {
+        if (testcase_file)   out << "  FILE:        " << testcase_file
+                                 << ":" << testcase_line << endl;
+      }
 
    switch(event)
       {
         case VHE_Create:
-             out << "  VHE_Create   " << flags_before << " ";
-             out << "            ";
+             out << "  VHE_Create   " << flags_before
+                 << "              ";
              break;
 
         case VHE_Unroll:
-             out << "  VHE_Unroll   " << flags_before << " ";
+             out << "  VHE_Unroll   " << flags_before
+                 << "              ";
              break;
 
         case VHE_Check:
@@ -184,7 +202,7 @@ const ValueFlags flags_before = (ValueFlags)flags;
                 }
              else if (flags_before & VF_DONT_DELETE)
                 {
-                  out << "still owned ";
+                  out << "still owned  ";
                 }
              else
                 {
@@ -194,49 +212,70 @@ const ValueFlags flags_before = (ValueFlags)flags;
                 }
              break;
 
+        case VHE_Destruct:
+             out << "  VHE_Destruct " << setw(26) << iarg;
+             break;
+
         case VHE_Error:
              out << "  " << setw(36)
                  << Error::error_name((ErrorCode)iarg) << " ";
              break;
 
         case VHE_PtrNew:
-             out << "  VHE_PtrNew   " << setw(24) << iarg;
+             out << "  VHE_PtrNew   " << setw(26) << iarg;
+             break;
+
+        case VHE_PtrNew0:
+             out << "  VHE_PtrNew0  " << setw(26) << iarg;
              break;
 
         case VHE_PtrCopy1:
-             out << "  VHE_PtrCopy1 " << setw(24) << iarg;
+             out << "  VHE_PtrCopy1 " << setw(26) << iarg;
              break;
 
         case VHE_PtrCopy2:
-             out << "  VHE_PtrCopy2 " << setw(24) << iarg;
+             out << "  VHE_PtrCopy2 " << setw(26) << iarg;
+             break;
+
+        case VHE_PtrCopy3:
+             out << "  VHE_PtrCopy3 " << setw(26) << iarg;
              break;
 
         case VHE_PtrClr:
-             out << "  VHE_PtrDel   " << setw(24) << iarg;
+             out << "  VHE_PtrClr   " << setw(26) << iarg;
              break;
 
         case VHE_PtrDel:
-             out << "  VHE_PtrDel   " << setw(24) << iarg;
+             out << "  VHE_PtrDel   " << setw(26) << iarg;
+             break;
+
+        case VHE_PtrDel0:
+             out << "  VHE_PtrDel0  " << setw(26) << iarg;
              break;
 
         case VHE_TokCopy1:
-             out << "  VHE_TokCopy1 " << setw(24) << iarg;
+             out << "  VHE_TokCopy1 " << setw(26) << iarg;
              break;
 
         case VHE_TokMove1:
-             out << "  VHE_TokMove1 " << setw(24) << iarg;
+             out << "  VHE_TokMove1 " << setw(26) << iarg;
              break;
 
         case VHE_TokMove2:
-             out << "  VHE_TokMove2 " << setw(24) << iarg;
+             out << "  VHE_TokMove2 " << setw(26) << iarg;
              break;
 
         case VHE_Completed:
-             out << "  VHE_Completed" << setw(24) << iarg;
+             out << "  VHE_Completed" << setw(26) << iarg;
              break;
 
         case VHE_Stale:
-             out << "  VHE_Stale    " << setw(24) << iarg;
+             out << "  VHE_Stale    " << setw(26) << iarg;
+             break;
+
+        case VHE_Visit:
+             out << "  VHE_Visit    " << iarg
+                 << "            " << flags_before << " ";
              break;
 
         default:

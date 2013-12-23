@@ -54,17 +54,18 @@ Executable::~Executable()
 {
    Log(LOG_UserFunction__fix)
       {
-   CERR << "deleting Executable " << (void *)this
-        << " (body size=" <<  body.size() << ")" << endl;
+        CERR << "deleting Executable " << (const void *)this
+             << " (body size=" <<  body.size() << ")" << endl;
       }
 
    loop(b, body.size())
        {
-         Value * val = body[b].extract_apl_val(LOC);
+         Value * val = body[b].get_apl_val_pointer();
          if (val)
             {
               val->clear_shared();
               val->erase(LOC);
+              body[b].extract_apl_val(LOC);
             }
        }
 }
@@ -136,14 +137,15 @@ Token_string out;
                    SYNTAX_ERROR;
                  }
 
-               out.append(tok);
+               out.append(Token());
+               move_2(out[out.size() - 1], tok, LOC);
             }
 
 
         // add an appropriate end token.
         //
         if (get_parse_mode() == PM_EXECUTE)   ;
-        else if (out.size())                  out.append(Token(TOK_ENDL));
+        else if (out.size())                  out.append(Token(TOK_ENDL), LOC);
       }
 
    Log(LOG_UserFunction__set_line)
@@ -152,7 +154,7 @@ Token_string out;
         parser.print_token_list(CERR, out, 0);
       } 
 
-   loop(t, out.size())   body.append(out[t]);
+   loop(t, out.size())   body.append(out[t], LOC);
 }
 //-----------------------------------------------------------------------------
 Token
@@ -218,7 +220,7 @@ UCS_string ret;
    while (tidx < line_txt.size())
       {
         if (line_txt[tidx] == UNI_DIAMOND)    break;
-        ret.append(line_txt[tidx++]);
+        ret.append(line_txt[tidx++], LOC);
       }
 
    // skip trailing spaces
@@ -359,7 +361,7 @@ Executable::unmark_all_values() const
 }
 //-----------------------------------------------------------------------------
 int
-Executable::show_owners(const char * prefix, ostream & out, Value_P value) const
+Executable::show_owners(const char * prefix, ostream & out, const Value & value) const
 {
 int count = 0;
 
@@ -368,7 +370,7 @@ int count = 0;
         const Token & tok = body[b];
         if (tok.get_ValueType() != TV_VAL)      continue;
 
-        if (tok.get_apl_val() == value)
+        if (tok.get_apl_val().get() == &value)
            {
              out << prefix << get_name() << "[" << b << "]" << endl;
              ++count;
@@ -381,6 +383,12 @@ int count = 0;
 ExecuteList *
 ExecuteList::fix(const UCS_string & data, const char * loc)
 {
+   // clear errors that may have occured before
+   {
+     Error * err = Workspace::get_error();
+     if (err) err->error_code = E_NO_ERROR;
+   }
+
 ExecuteList * fun = new ExecuteList(data, loc);
 
    Log(LOG_UserFunction__fix)
@@ -392,10 +400,31 @@ ExecuteList * fun = new ExecuteList(data, loc);
 
    {
      Error * err = Workspace::get_error();
-     if (err)   err->parser_loc = 0;
+     if (err && err->error_code)
+        {
+          Log(LOG_UserFunction__fix)
+             {
+                CERR << "fix pmode=execute list failed with error "
+                     << Error::error_name(err->error_code) << endl;
+             }
+
+          err->parser_loc = 0;
+          delete fun;
+          return 0;
+        }
    }
 
-   fun->parse_body_line(Function_Line_0, data, loc);
+   try
+      {
+        fun->parse_body_line(Function_Line_0, data, loc);
+      }
+   catch (Error err)
+      {
+        Error * werr = Workspace::get_error();
+        if (werr)   *werr = err;
+        delete fun;
+        return 0;
+      }
 
    Log(LOG_UserFunction__fix)
       {
@@ -403,7 +432,7 @@ ExecuteList * fun = new ExecuteList(data, loc);
       }
 
    // for ⍎ we don't append TOK_END, but only TOK_RETURN_EXEC.
-   fun->body.append(Token(TOK_RETURN_EXEC));
+   fun->body.append(Token(TOK_RETURN_EXEC), LOC);
 
    // fix program constants so that they don't get deleted.
    //
@@ -441,7 +470,7 @@ StatementList * fun = new StatementList(data, loc);
         CERR << "fun->body.size() is " << fun->body.size() << endl;
       }
 
-   fun->body.append(Token(TOK_RETURN_STATS));
+   fun->body.append(Token(TOK_RETURN_STATS), LOC);
 
    // fix program constants so that they don't get deleted.
    //

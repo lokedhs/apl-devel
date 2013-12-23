@@ -30,13 +30,15 @@ class Value;
 
 class VH_entry
 {
+   friend void print_history(ostream & out, const Value * val,
+                             const char * loc);
+
 public:
    VH_entry() {}
 
    VH_entry(const Value * val, VH_event ev, int ia, const char * loc);
 
    static void init();
-   static void print_history(ostream & out, const Value * val);
 
    static VH_entry history[VALUEHISTORY_SIZE];
    static int idx;
@@ -53,4 +55,6 @@ protected:
    int           testcase_line;
 };
 
+extern void print_history(ostream & out, const Value * val,
+                                const char * loc);
 #endif // __VALUEHISTORY_HH_DEFINED__

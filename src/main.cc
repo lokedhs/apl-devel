@@ -51,6 +51,7 @@
    // global flags
    //
 bool silent = false;
+bool emacs_mode = false;
 bool do_not_echo = false;
 
 //-----------------------------------------------------------------------------
@@ -391,8 +392,9 @@ _("    -l num               turn log facility num (1-%d) ON\n"), LID_MAX-1);
 "    -w milli             wait milli milliseconds at startup\n"
 "    --noCIN              do not echo input(for scripting)\n"
 "    --rawCIN             do not use the readline lib for input\n"
-"    --noCONT             do not load CONTINUE workspace on startup)\n"
 "    --[no]Color          start with ]XTERM ON [OFF])\n"
+"    --noCONT             do not load CONTINUE workspace on startup)\n"
+"    --emacs              run in emacs mode\n"
 "    --[no]SV             [do not] start APnnn (a shared variable server)\n"
 "    --cfg                show ./configure options used and exit\n"
 "    --gpl                show license (GPL) and exit\n"
@@ -406,6 +408,7 @@ _("    -l num               turn log facility num (1-%d) ON\n"), LID_MAX-1);
 "                         2:   continue (don't exit) after last testcase\n"
 "                         3:   stop testcases after first error (don't exit)\n"
 "                         4:   exit after first error\n"
+"    --TR                 randomize order of testfiles\n"
 "    --TS                 append to (rather than override) summary.log\n"
 "    --                   end of options for %s\n"), prog1);
    CERR << cc << endl;
@@ -564,7 +567,8 @@ struct user_preferences
      do_sv(true),
      daemon(false),
      append_summary(false),
-     wait_ms(0)
+     wait_ms(0),
+     randomize_testfiles(false)
    {}
 
    /// load workspace CONTINUE on start-up
@@ -590,6 +594,9 @@ struct user_preferences
 
    /// wait at start-up
    int wait_ms;
+
+   /// randomize the order of testfiles
+   bool randomize_testfiles;
 };
 //-----------------------------------------------------------------------------
 // read user preference file(s) if present
@@ -724,6 +731,11 @@ int line = 0;
               loop(p, count - 1)   Output::color_CERR[p] = (char)(d[p] & 0xFF);
               Output::color_CERR[count - 1] = 0;
             }
+         else if (!strcasecmp(opt, "UERR-SEQUENCE"))
+            {
+              loop(p, count - 1)   Output::color_UERR[p] = (char)(d[p] & 0xFF);
+              Output::color_UERR[count - 1] = 0;
+            }
          else if (!strcasecmp(opt, "RESET-SEQUENCE"))
             {
               loop(p, count - 1)   Output::color_RESET[p] = (char)(d[p] & 0xFF);
@@ -757,6 +769,14 @@ int line = 0;
          else if (!strcasecmp(opt, "CERR-BACKGROUND"))
             {
               Output::color_CERR_background = atoi(arg);
+            }
+         else if (!strcasecmp(opt, "UERR-FOREGROUND"))
+            {
+              Output::color_UERR_foreground = atoi(arg);
+            }
+         else if (!strcasecmp(opt, "UERR-BACKGROUND"))
+            {
+              Output::color_UERR_background = atoi(arg);
             }
          else if (!strncasecmp(opt, "LIBREF-", 7))
             {
@@ -899,6 +919,10 @@ user_preferences up;
             {
               up.do_CONT = false;
             }
+         else if (!strcmp(opt, "--emacs"))
+            {
+              emacs_mode = true;
+            }
          else if (!strcmp(opt, "--SV"))
             {
               up.do_sv = true;
@@ -975,6 +999,10 @@ user_preferences up;
                    return 5;
                  }
             }
+         else if (!strcmp(opt, "--TR"))
+            {
+              up.randomize_testfiles = true;
+            }
          else if (!strcmp(opt, "--TS"))
             {
               up.append_summary = true;
@@ -1002,6 +1030,40 @@ user_preferences up;
             }
        }
 
+   if (emacs_mode)
+      {
+        // CIN = U+F00C0 = UTF8 F3 B0 83 80 ...
+        Output::color_CIN[0] = 0xF3;
+        Output::color_CIN[1] = 0xB0;
+        Output::color_CIN[2] = 0x83;
+        Output::color_CIN[3] = 0x80;
+        Output::color_CIN[4] = 0;
+
+        // COUT = U+F00C1 = UTF8 F3 B0 83 81 ...
+        Output::color_COUT[0] = 0xF3;
+        Output::color_COUT[1] = 0xB0;
+        Output::color_COUT[2] = 0x83;
+        Output::color_COUT[3] = 0x81;
+        Output::color_COUT[4] = 0;
+
+        // CERR = U+F00C2 = UTF8 F3 B0 83 82 ...
+        Output::color_CERR[0] = 0xF3;
+        Output::color_CERR[1] = 0xB0;
+        Output::color_CERR[2] = 0x83;
+        Output::color_CERR[3] = 0x82;
+        Output::color_CERR[4] = 0;
+
+        // UERR = U+F00C3 = UTF8 F3 B0 83 83 ...
+        Output::color_UERR[0] = 0xF3;
+        Output::color_UERR[1] = 0xB0;
+        Output::color_UERR[2] = 0x83;
+        Output::color_UERR[3] = 0x83;
+        Output::color_UERR[4] = 0;
+
+        // no clear_EOL
+        Output::clear_EOL[0] = 0;
+      }
+
    // init input after reading the command line options, so that the user
    // has a chance to disable readline
    //
@@ -1021,6 +1083,7 @@ user_preferences up;
    Log(LOG_argc_argv)   show_argv(argc, argv);
 
    TestFiles::testcase_count = TestFiles::test_file_names.size();
+   if (up.randomize_testfiles)   TestFiles::randomize_files();
 
    if (ProcessorID::init(up.do_sv, up.requested_id, up.requested_par))
       {

@@ -135,8 +135,8 @@ public:
       { return &ravel[nz_element_count()]; }
 
    /// set the prototype (according to B) if this value is empty.
-   void set_default(Value_P B)
-      { if (is_empty())   ravel[0].init_type(B->get_ravel(0)); }
+   void set_default(const Value & B)
+      { if (is_empty())   ravel[0].init_type(B.get_ravel(0)); }
 
    /// Return the number of skalars in this value (enlist).
    ShapeItem get_enlist_count() const;
@@ -362,7 +362,7 @@ public:
    void unmark() const;
 
    /// maybe delete this value.
-   void erase(const char * loc) const;
+   void erase(const char * loc);
 
    /// rollback initialization of this value
    void rollback(ShapeItem items, const char * loc);
@@ -373,10 +373,6 @@ public:
    /// return a deep copy of \b this value
    Value_P clone(const char * loc) const;
 
-   /// clone this value if needed (according to its flags)
-   Value_P clone_if_owned(const char * loc)
-      { return (flags & VF_need_clone) ? clone(loc) : Value_P(this, loc); }
-
    /// get the min spacing for this column and set/clear if there
    /// is/isn't a numeric item in the column.
    /// are/ain't numeric items in col.
@@ -385,8 +381,8 @@ public:
    /// list a value
    ostream & list_one(ostream & out, bool show_owners);
 
-   /// check \b this value and return a Value_P to it
-   Value_P check_value(const char * loc);
+   /// check \b that this value is completely initialized, and set complete flag
+   void check_value(const char * loc);
 
    /// return the total CDR size (header + data + padding) for \b this value.
    int total_size_brutto(int CDR_type) const
@@ -447,7 +443,7 @@ public:
    /// print stale Values, and return the number of stale Values.
    static int print_stale(ostream & out);
 
-#define stv_def(x) /** x **/ static Value x; static Value_P x ## _P;
+#define stv_def(x) /** x **/ static Value _ ## x; static Value_P x ## _P;
 #include "StaticValues.def"
 
    /// total nz_element_counts of all non-short values
@@ -474,6 +470,9 @@ protected:
    /// special constructor for static values (Zero, One etc.)
    Value(const char * loc, Value_how how);
 
+   /// release sub-values of this value
+   void release_sub(const char * loc);
+
    /// valueFlags for this value.
    mutable uint16_t flags;
 
@@ -482,10 +481,64 @@ protected:
 
    /// the cells of a short (i.e. ⍴,value ≤ SHORT_VALUE_LENGTH_WANTED) value
    Cell short_value[SHORT_VALUE_LENGTH_WANTED];
+
+public:
+   /// a "checksum" to detect deleted values
+   const void * check_ptr;
 };
 // ----------------------------------------------------------------------------
 
-inline int increment_owner_count(Value * v) { return ++v->owner_count; }
-inline int decrement_owner_count(Value * v) { return --v->owner_count; }
+extern void print_history(ostream & out, const Value * val,
+                                const char * loc);
+
+// ----------------------------------------------------------------------------
+inline int
+get_owner_count(const Value * v)
+{
+   return  v ? v->owner_count : -99;
+}
+//-----------------------------------------------------------------------------
+inline void
+increment_owner_count(Value * v, const char * loc)
+{
+   Assert1(v);
+
+   // if SHARED_POINTER_METHOD == 1 then erase() deletes the value before
+   // the pointer owner is deleted. Do noting then.
+   //
+   if (v->check_ptr == ((const char *)v + 7))   ++v->owner_count;
+}
+//-----------------------------------------------------------------------------
+inline void
+decrement_owner_count(Value * v, const char * loc)
+{
+   Assert1(v);
+
+   // if SHARED_POINTER_METHOD == 1 then erase() deletes the value before
+   // the pointer owner is deleted. Do noting then.
+   //
+   if (v->check_ptr == ((const char *)v + 7))
+      {
+#if SHARED_POINTER_METHOD == 3
+        Assert1(v->owner_count > 0);
+        if (v->owner_count == 0)
+           {
+             static bool dumped = false;
+             if (dumped)   return;
+             dumped = true;
+             cerr << "decrement_owner_count() reached 0 for static value "
+                  << v->where_allocated() << endl;
+             Backtrace::show(__FILE__, __LINE__);
+             exit(0);
+             return;
+           }
+
+         --v->owner_count;
+
+        if (v->owner_count == 0)   delete v;
+#endif
+      }
+}
+//-----------------------------------------------------------------------------
 
 #endif // __VALUE_HH_DEFINED__

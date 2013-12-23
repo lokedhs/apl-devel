@@ -358,6 +358,7 @@ Quad_SVx.cc				Quad_SVx.hh		\
 Quad_TF.cc				Quad_TF.hh		\
 RealCell.cc				RealCell.hh		\
 Shape.cc				Shape.hh		\
+					SharedValuePointer.hh	\
 					Simple_string.hh	\
 SkalarFunction.cc			SkalarFunction.hh	\
 					Source.hh		\
@@ -1870,6 +1871,9 @@ test: all
 
 test1: all
 	./apl --id 1010 --TM 3 -T testcases/*\.tc
+
+test2: all
+	./apl --id 1010 --TR -T testcases/*tc
 
 perf: apl
 	./apl --id 1010 --TM 3 -T testcases/Performance.pt
